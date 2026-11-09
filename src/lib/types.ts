@@ -1,0 +1,34 @@
+export type NoteKind = 'text' | 'checklist';
+
+export type NoteColorKey =
+  | 'default'
+  | 'yellow'
+  | 'green'
+  | 'blue'
+  | 'purple'
+  | 'pink'
+  | 'orange'
+  | 'gray';
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface Note {
+  id: string;
+  kind: NoteKind;
+  title: string;
+  /** Contenu HTML (notes texte). */
+  html: string;
+  /** Éléments (listes de cases à cocher). */
+  items: ChecklistItem[];
+  color: NoteColorKey;
+  pinned: boolean;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+  /** Horodatage de mise à la corbeille, null si active. */
+  deletedAt: number | null;
+}
