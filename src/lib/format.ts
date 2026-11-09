@@ -1,52 +1,59 @@
 import type { Note } from './types';
 
-const dayMonth = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
-const fullDate = new Intl.DateTimeFormat('fr-FR', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric'
-});
-const numeric = new Intl.DateTimeFormat('fr-FR', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric'
-});
+const MONTHS = [
+  'janvier',
+  'février',
+  'mars',
+  'avril',
+  'mai',
+  'juin',
+  'juillet',
+  'août',
+  'septembre',
+  'octobre',
+  'novembre',
+  'décembre'
+];
 
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getDate() === b.getDate() &&
-    a.getMonth() === b.getMonth() &&
-    a.getFullYear() === b.getFullYear()
-  );
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-/** Date courte affichée sous une carte de note. */
+function time(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** « 6 Novembre » (ou « 6 Novembre 2024 » si autre année). */
 export function formatCardDate(ts: number): string {
   const d = new Date(ts);
   const now = new Date();
-  if (isSameDay(d, now)) {
-    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const month = capitalize(MONTHS[d.getMonth()]);
+  if (d.getFullYear() !== now.getFullYear()) {
+    return `${d.getDate()} ${month} ${d.getFullYear()}`;
   }
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (isSameDay(d, yesterday)) return 'Hier';
-  if (d.getFullYear() === now.getFullYear()) return dayMonth.format(d);
-  return numeric.format(d);
+  return `${d.getDate()} ${month}`;
 }
 
-/** « 9 nov. 2026 · 14:03 » */
-export function formatMeta(ts: number): string {
+/** « 13 octobre 19:18 » */
+export function formatNoteDate(ts: number): string {
   const d = new Date(ts);
-  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  return `${fullDate.format(d)} · ${time}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${time(ts)}`;
 }
 
-/** « 9 nov. 2026 » */
+/** « 9 novembre 2026 · 17:58 » */
+export function formatFullDate(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ${time(ts)}`;
+}
+
+/** « 9 novembre 2026 » */
 export function formatDay(ts: number): string {
-  return fullDate.format(new Date(ts));
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** Texte brut d'une note (pour l'aperçu et la recherche). */
+/** Texte brut d'une note (aperçu, recherche, partage). */
 export function plainText(note: Note): string {
   if (note.kind === 'checklist') {
     return note.items

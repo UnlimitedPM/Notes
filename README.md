@@ -1,93 +1,100 @@
 # Notes — réplique web de l'app Notes MIUI / HyperOS
 
-Application de notes et de listes en PWA, pensée pour remplacer l'application **Notes** des
-téléphones Redmi/Xiaomi tout en fonctionnant aussi sur iPhone (et sur ordinateur).
+PWA de notes et de tâches au look **AMOLED noir + accent ambre**, calquée sur l'application
+Notes des Redmi/Xiaomi, utilisable aussi sur iPhone et sur ordinateur.
 
-- Interface sombre/clair automatique, sans framework UI externe.
-- Données **100 % locales** (IndexedDB) : rien ne quitte l'appareil pour l'instant.
-- Installable sur l'écran d'accueil iOS/Android (mode plein écran).
+Données 100 % locales pour l'instant (IndexedDB), aucune requête réseau.
+
+## Écrans
+
+| Écran | Détails |
+| --- | --- |
+| **Notes** | Titre fin, grille à deux colonnes, cartes arrondies, FAB ambre, onglets Notes / Tâches |
+| **Tâches** | Toutes les cases à cocher de toutes les listes, éditables sur place, terminées repliables |
+| **Note (lecture)** | Grand titre, date + nombre de caractères, partage, style, menu |
+| **Note (édition)** | Touchez le texte : annuler / rétablir / valider en haut, barre outil en bas (vocal, image, dessin, liste, texte) |
+| **Réglages** | Cloud, taille du texte, tri, disposition, notes rapides, rappels, thème, corbeille, export |
+| **Dossiers** | Création, filtre de l'accueil, déplacement des notes via l'appui long |
 
 ## Fonctionnalités
 
-- Accueil en grille à deux colonnes, notes épinglées en premier.
-- Recherche instantanée (insensible aux accents et à la ponctuation : « wifi » trouve « Wi-Fi »).
-- Notes texte avec mise en forme (gras, italique, souligné, barré, surlignage, titres, listes).
-- Listes de cases à cocher (ajout avec Entrée, suppression avec Retour arrière, coche animée).
-- Conversion note ⇄ liste en un appui.
-- 8 couleurs de note, épinglage, duplication, corbeille avec restauration.
-- Tri par modification, création ou titre.
-- Insertion d'images (stockées dans la note).
-- Sauvegarde automatique (debounce 250 ms), y compris en quittant l'écran.
-- Mode hors ligne complet via service worker (PWA).
-- Thème système / clair / sombre.
+- Thème système / clair / sombre, avec noir pur en sombre.
+- 8 couleurs de note (cartes et fond de l'éditeur teintés).
+- Mise en forme : gras, italique, souligné, barré, surlignage, titres, listes, effacer.
+- Notes texte ⇄ listes de cases à cocher, avec annuler/rétablir.
+- Recherche tolérante aux accents et à la ponctuation (accents, tirets).
+- Épinglage, duplication, corbeille avec restauration, tri, disposition grille/liste.
+- Taille du texte réglable (petite, moyenne, grande).
+- Insertion d'images (base64 dans la note).
+- Export JSON de toutes les notes et dossiers.
+- PWA hors ligne (service worker), installation iOS/Android.
+- Écran d'accueil, paramètres, corbeille : esthétique reprise des captures fournies.
 
 ## Démarrer
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173 (accessible sur le réseau local)
 ```
-
-Le serveur écoute sur le réseau local (`host: true`) : ouvrez l'adresse affichée depuis le
-téléphone pour tester sur l'appareil.
-
-## Compiler
 
 ```bash
 npm run check      # svelte-check
-npm run build      # génère dist/ + service worker
-npm run preview    # sert dist/ localement
+npm run build      # dist/ + service worker
+npm run preview
 ```
 
-`dist/` est un site statique : n'importe quel hébergeur (Nginx, Caddy, GitHub Pages, Vercel…)
-fonctionne. Le service worker exige **HTTPS** (ou localhost) pour activer l'installation PWA.
+`dist/` est un site statique. Le service worker (installation PWA) exige HTTPS, sauf en
+local.
 
 ## Installer sur iPhone
 
-1. Ouvrir l'application dans **Safari** (obligatoire pour l'installation iOS).
-2. Bouton Partager → **Sur l'écran d'accueil**.
-3. L'application s'ouvre ensuite en plein écran, sans barre d'adresse.
+Safari → Partager → **Sur l'écran d'accueil**. L'app s'ouvre alors en plein écran avec la
+barre d'état noire.
 
 ## Structure
 
 ```
 src/
-  App.svelte                 navigation (accueil / éditeur / corbeille)
-  app.css                    thèmes, couleurs de notes, feuilles du bas
+  App.svelte                    navigation accueil / note / réglages / corbeille
+  app.css                       thèmes, couleurs de notes, feuilles, toast
   lib/
-    types.ts                 modèle de données
-    db.ts                    persistance IndexedDB
-    notes.svelte.ts          état global (runes Svelte 5), recherche, seed
-    format.ts                dates FR, texte brut, échappement HTML
+    types.ts                    modèle (notes, listes, dossiers, préférences)
+    db.ts                       persistance IndexedDB
+    notes.svelte.ts             état global (runes), tâches, dossiers, préférences
+    format.ts                   dates françaises, texte brut, échappement
+    toast.svelte.ts             notifications éphémères
     components/
-      HomeScreen.svelte      grille, recherche, menus
-      NoteCard.svelte        carte de note + appui long
-      EditorScreen.svelte    éditeur texte / liste, mise en forme, couleurs
-      TrashScreen.svelte     corbeille
-      Sheet.svelte           feuille modale réutilisable
-      Icon.svelte            icônes SVG intégrées
+      HomeScreen.svelte         onglets Notes/Tâches, grille, FAB, dossiers
+      NoteCard.svelte           carte de note (appui long = actions)
+      TaskCard.svelte           tâche éditable sur place
+      EditorScreen.svelte       lecture + édition d'une note
+      SettingsScreen.svelte     réglages fidèles à la capture
+      TrashScreen.svelte        corbeille
+      TabBar.svelte             barre Notes / Tâches
+      Sheet.svelte              feuille modale
+      Icon.svelte               icônes SVG maison
 ```
 
 ## Données
 
-Tout est stocké dans IndexedDB (`notes-app` / store `notes`), plus deux préférences dans
-`localStorage` (`notes:theme`, `notes:sort`). Aucune requête réseau n'est effectuée.
+IndexedDB `notes-app` / store `notes`. Préférences et dossiers dans `localStorage`
+(`notes:theme`, `notes:sort`, `notes:textSize`, `notes:layout`, `notes:quickNotes`,
+`notes:reminders`, `notes:folders`, `notes:seed`).
 
-Au premier lancement, quelques notes d'exemple sont créées (dont une note d'accueil) : elles
-peuvent être supprimées, elles ne reviendront pas.
+Au premier lancement, cinq notes d'exemple sont créées (dont une liste « À faire » qui
+alimente l'onglet Tâches). Elles peuvent être supprimées, le jeu d'exemple ne revient pas.
 
-## Prochaines étapes (cloud auto-hébergé)
+## À venir
 
-Le modèle est déjà prêt pour la synchronisation :
+- **Cloud auto-hébergé** : petite API (Node/Fastify ou FastAPI + SQLite), synchronisation
+  par `updatedAt` puis journal de modifications, Docker + HTTPS.
+- Notes vocales et dessin (boutons déjà présents, actuellement en « bientôt »).
+- Rappels réels et notifications.
+- Import JSON, verrouillage par empreinte.
 
-1. Petit serveur (Node/Fastify ou FastAPI) exposant `GET /notes?since=` et `POST /notes`.
-2. Base SQLite ou PostgreSQL, un utilisateur = un espace.
-3. Stratégie simple : `updatedAt` + résolution dernier-écrit-gagne, ou journal de deltas.
-4. Authentification par jeton, déploiement Docker + HTTPS.
-5. L'app reste fonctionnelle hors ligne et pousse les changements en différé.
+## Limites connues
 
-## Limitations connues
-
-- Pas encore de dossiers, d'étiquettes visibles, de rappels ni de dessin manuscrit.
-- Le presse-papiers riche (collage depuis Word) dépend du navigateur.
-- Pas de verrouillage par empreinte (à faire côté serveur/appareil).
+- Le vocal et le dessin sont des emplacements réservés.
+- Pas de widgets ni de partage système avancé.
+- L'appui long sur mobile déclenche aussi le menu contextuel du navigateur sur certains
+  appareils, sans conséquence.

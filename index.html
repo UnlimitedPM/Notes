@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Notes</title>
     <meta name="description" content="Notes et listes, rapide et hors ligne." />
-    <meta name="theme-color" content="#f4f4f6" />
+    <meta name="theme-color" content="#000000" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Notes" />
@@ -20,7 +20,7 @@
         var theme = t === 'light' || t === 'dark' ? t : dark ? 'dark' : 'light';
         document.documentElement.dataset.theme = theme;
         document.querySelector('meta[name="theme-color"]').setAttribute('content',
-          theme === 'dark' ? '#0d0d0f' : '#f4f4f6');
+          theme === 'dark' ? '#000000' : '#ffffff');
       } catch (e) {}
     </script>
   </head>

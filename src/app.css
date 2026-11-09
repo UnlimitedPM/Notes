@@ -1,93 +1,131 @@
 /* ============================================================
-   Design tokens
+   Thèmes (sombre AMOLED par défaut, proche de l'app MIUI)
    ============================================================ */
 :root {
-  --accent: #3482ff;
-  --accent-soft: rgba(52, 130, 255, 0.14);
-  --bg: #f4f4f6;
+  --accent: #ffb300;
+  --accent-press: #e0a000;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(255, 179, 0, 0.16);
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #ededf1;
-  --surface-3: #e2e2e8;
-  --text: #16161a;
-  --text-2: #74747e;
-  --text-3: #a3a3ad;
-  --line: rgba(0, 0, 0, 0.075);
+  --surface-2: #f1f1f3;
+  --surface-3: #e4e4e7;
+  --line: rgba(0, 0, 0, 0.08);
+  --text: #111114;
+  --text-2: #6f6f77;
+  --text-3: #9b9ba3;
   --danger: #e5484d;
-  --shadow-card: 0 1px 2px rgba(16, 16, 32, 0.04), 0 6px 18px rgba(16, 16, 32, 0.045);
-  --shadow-fab: 0 8px 22px rgba(52, 130, 255, 0.38);
+  --scrim: rgba(0, 0, 0, 0.4);
+  --shadow-fab: 0 6px 20px rgba(0, 0, 0, 0.25);
   --font: 'MiSans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --card-title: 17px;
+  --card-text: 14.5px;
+  --note-title: 32px;
+  --note-text: 19px;
+
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --bg: #0d0d0f;
-  --surface: #1a1a1e;
-  --surface-2: #232328;
-  --surface-3: #2e2e34;
-  --text: #f1f1f4;
-  --text-2: #9a9aa4;
-  --text-3: #6c6c76;
-  --line: rgba(255, 255, 255, 0.075);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-fab: 0 8px 22px rgba(0, 0, 0, 0.55);
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #28282b;
+  --surface-3: #38383c;
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #ffffff;
+  --text-2: #a1a1a6;
+  --text-3: #8a8a90;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-fab: 0 8px 24px rgba(0, 0, 0, 0.6);
   color-scheme: dark;
+}
+
+[data-text-size='small'] {
+  --card-title: 16px;
+  --card-text: 13.5px;
+  --note-title: 29px;
+  --note-text: 17px;
+}
+
+[data-text-size='large'] {
+  --card-title: 18px;
+  --card-text: 15.5px;
+  --note-title: 35px;
+  --note-text: 21px;
 }
 
 /* ============================================================
    Couleurs de notes
    ============================================================ */
 [data-note-color='default'] {
-  --card-bg: #ffffff;
+  --card-bg: #f2f2f4;
+  --note-bg: #ffffff;
 }
 [data-note-color='yellow'] {
-  --card-bg: #fff5cc;
+  --card-bg: #fff3c4;
+  --note-bg: #fff8de;
 }
 [data-note-color='green'] {
-  --card-bg: #e4f5e4;
+  --card-bg: #e3f3e3;
+  --note-bg: #eff9ef;
 }
 [data-note-color='blue'] {
-  --card-bg: #e5efff;
+  --card-bg: #e4eeff;
+  --note-bg: #f0f5ff;
 }
 [data-note-color='purple'] {
-  --card-bg: #f0e9ff;
+  --card-bg: #efe8ff;
+  --note-bg: #f7f3ff;
 }
 [data-note-color='pink'] {
-  --card-bg: #ffe7ef;
+  --card-bg: #ffe6ee;
+  --note-bg: #fff2f6;
 }
 [data-note-color='orange'] {
-  --card-bg: #ffefdf;
+  --card-bg: #ffebd5;
+  --note-bg: #fff5ea;
 }
 [data-note-color='gray'] {
-  --card-bg: #ededf1;
+  --card-bg: #efeff2;
+  --note-bg: #f7f7f9;
 }
 
 [data-theme='dark'] [data-note-color='default'] {
-  --card-bg: #1c1c20;
+  --card-bg: #1c1c1e;
+  --note-bg: #000000;
 }
 [data-theme='dark'] [data-note-color='yellow'] {
-  --card-bg: #3a3016;
+  --card-bg: #332b12;
+  --note-bg: #1a1607;
 }
 [data-theme='dark'] [data-note-color='green'] {
-  --card-bg: #1b3222;
+  --card-bg: #17281a;
+  --note-bg: #0b150d;
 }
 [data-theme='dark'] [data-note-color='blue'] {
-  --card-bg: #14263f;
+  --card-bg: #172437;
+  --note-bg: #0a111c;
 }
 [data-theme='dark'] [data-note-color='purple'] {
-  --card-bg: #261e3b;
+  --card-bg: #241b36;
+  --note-bg: #120d1c;
 }
 [data-theme='dark'] [data-note-color='pink'] {
-  --card-bg: #3a1d27;
+  --card-bg: #33202a;
+  --note-bg: #1a0f15;
 }
 [data-theme='dark'] [data-note-color='orange'] {
-  --card-bg: #3a2615;
+  --card-bg: #33230f;
+  --note-bg: #1a1208;
 }
 [data-theme='dark'] [data-note-color='gray'] {
-  --card-bg: #26262b;
+  --card-bg: #26262a;
+  --note-bg: #141416;
 }
 
 /* ============================================================
@@ -138,13 +176,13 @@ body {
 
 @media (min-width: 600px) {
   body {
-    background: #e7e7ec;
+    background: #e9e9ec;
   }
   [data-theme='dark'] body {
-    background: #050506;
+    background: #0a0a0b;
   }
   .app {
-    box-shadow: 0 0 0 1px var(--line), 0 24px 70px rgba(0, 0, 0, 0.16);
+    box-shadow: 0 0 0 1px var(--line), 0 24px 70px rgba(0, 0, 0, 0.18);
   }
 }
 
@@ -173,15 +211,15 @@ textarea,
 }
 
 ::selection {
-  background: rgba(52, 130, 255, 0.25);
+  background: rgba(255, 179, 0, 0.3);
 }
 
 /* ============================================================
-   Briques réutilisables
+   Briques communes
    ============================================================ */
 .icon-btn {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -196,6 +234,16 @@ textarea,
   color: var(--danger);
 }
 
+.screen-title {
+  margin: 0;
+  padding: 0 18px;
+  font-size: 38px;
+  font-weight: 300;
+  letter-spacing: -0.8px;
+  line-height: 1.15;
+  color: var(--text);
+}
+
 .muted {
   color: var(--text-3);
   font-size: 14px;
@@ -204,7 +252,7 @@ textarea,
 .text-btn {
   color: var(--accent);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 8px 10px;
   border-radius: 10px;
 }
@@ -212,13 +260,13 @@ textarea,
   background: var(--accent-soft);
 }
 
-/* Feuilles du bas (bottom sheets) */
+/* Feuilles du bas */
 .scrim {
   position: fixed;
   inset: 0;
   z-index: 40;
   width: 100%;
-  background: rgba(0, 0, 0, 0.36);
+  background: var(--scrim);
   cursor: default;
 }
 
@@ -232,9 +280,9 @@ textarea,
   max-width: 520px;
   margin: 0 auto;
   background: var(--surface);
-  border-radius: 22px 22px 0 0;
-  padding: 0 8px calc(10px + var(--safe-bottom));
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.14);
+  border-radius: 26px 26px 0 0;
+  padding: 0 8px calc(12px + var(--safe-bottom));
+  box-shadow: 0 -12px 44px rgba(0, 0, 0, 0.35);
   max-height: 86dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -245,15 +293,15 @@ textarea,
   height: 4px;
   border-radius: 999px;
   background: var(--surface-3);
-  margin: 8px auto 6px;
+  margin: 8px auto 4px;
 }
 
 .sheet-title {
-  padding: 8px 16px 10px;
+  padding: 10px 16px 10px;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--text-2);
+  color: var(--text-3);
   text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -265,9 +313,9 @@ textarea,
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 13px 14px;
+  padding: 14px;
   border-radius: 14px;
-  font-size: 16px;
+  font-size: 16.5px;
   text-align: left;
 }
 .sheet-row:active {
@@ -289,21 +337,21 @@ textarea,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 22vh 32px 0;
+  gap: 4px;
+  padding: 25vh 32px 0;
   text-align: center;
   color: var(--text-2);
   user-select: none;
 }
 .empty-art {
-  width: 96px;
-  height: 96px;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: var(--surface-2);
   color: var(--text-3);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .empty-title {
   margin: 0;
@@ -315,4 +363,83 @@ textarea,
   margin: 0;
   font-size: 14px;
   color: var(--text-3);
+  max-width: 260px;
+}
+
+/* Interrupteur */
+.switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background 0.18s ease;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s var(--ease);
+}
+.switch.on {
+  background: var(--accent);
+}
+.switch.on::after {
+  transform: translateX(18px);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + var(--safe-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: min(86vw, 420px);
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: rgba(45, 45, 48, 0.95);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: toast-in 0.22s var(--ease);
+  pointer-events: none;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Barres de défilement discrètes */
+.scroll,
+.doc,
+.settings-scroll,
+.trash-scroll,
+.sheet {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll::-webkit-scrollbar,
+.doc::-webkit-scrollbar,
+.settings-scroll::-webkit-scrollbar,
+.trash-scroll::-webkit-scrollbar,
+.sheet::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }

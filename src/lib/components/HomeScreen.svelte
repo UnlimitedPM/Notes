@@ -1,63 +1,63 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import Icon from './Icon.svelte';
   import NoteCard from './NoteCard.svelte';
+  import TaskCard from './TaskCard.svelte';
   import Sheet from './Sheet.svelte';
-  import { notesStore, type SortKey, type ThemeKey } from '../notes.svelte';
+  import TabBar from './TabBar.svelte';
+  import { tick } from 'svelte';
+  import { notesStore } from '../notes.svelte';
+  import { confirmStore } from '../confirm.svelte';
   import { NOTE_COLORS } from '../colors';
-  import { plainText } from '../format';
-  import type { Note, NoteColorKey, NoteKind } from '../types';
+  import type { Folder, Note, NoteColorKey } from '../types';
+
+  type SheetName = 'actions' | 'color' | 'folders' | 'move' | null;
 
   interface Props {
+    tab: 'notes' | 'tasks';
+    ontab: (tab: 'notes' | 'tasks') => void;
     onopen: (id: string) => void;
-    onnew: (kind: NoteKind) => void;
-    ontrash: () => void;
+    onnew: () => void;
+    onsettings: () => void;
   }
 
-  let { onopen, onnew, ontrash }: Props = $props();
+  let { tab, ontab, onopen, onnew, onsettings }: Props = $props();
 
-  let searching = $state(false);
-  let query = $state('');
-  let searchEl = $state<HTMLInputElement | null>(null);
-
-  let menuOpen = $state(false);
-  let sortOpen = $state(false);
-  let themeOpen = $state(false);
-  let actionsOpen = $state(false);
-  let colorOpen = $state(false);
+  let sheet = $state<SheetName>(null);
   let selectedId = $state<string | null>(null);
+  let showCompleted = $state(false);
+  let addingFolder = $state(false);
+  let folderName = $state('');
+  let folderInput = $state<HTMLInputElement | null>(null);
 
   const selected = $derived(
     selectedId ? (notesStore.notes.find((n) => n.id === selectedId) ?? null) : null
   );
-  const results = $derived(notesStore.search(query));
-  const columns = $derived(splitColumns(results));
+  const notes = $derived(notesStore.visibleNotes);
+  const columns = $derived(splitColumns(notes));
+  const tasks = $derived(notesStore.tasks);
+  const completedCount = $derived(tasks.filter((t) => t.done).length);
 
-  const sortLabels: Record<SortKey, string> = {
-    updated: 'Modification',
-    created: 'Création',
-    title: 'Titre'
-  };
-  const themeLabels: Record<ThemeKey, string> = {
-    system: 'Système',
-    light: 'Clair',
-    dark: 'Sombre'
-  };
-  const sortOptions: SortKey[] = ['updated', 'created', 'title'];
-  const themeOptions: ThemeKey[] = ['system', 'light', 'dark'];
-  const themeIcons: Record<ThemeKey, string> = {
-    system: 'monitor',
-    light: 'sun',
-    dark: 'moon'
-  };
+  const sheetTitle = $derived(
+    sheet === 'color'
+      ? 'Couleur de la note'
+      : sheet === 'actions'
+        ? selected?.title || 'Note'
+        : sheet === 'folders'
+          ? 'Dossiers'
+          : sheet === 'move'
+            ? 'Déplacer vers'
+            : ''
+  );
 
   function splitColumns(list: Note[]): Note[][] {
     const cols: Note[][] = [[], []];
     const heights = [0, 0];
     for (const note of list) {
-      const textLength = plainText(note).length;
-      const checkRows = note.kind === 'checklist' ? Math.min(note.items.length, 3) * 26 : 0;
-      const estimate = 62 + checkRows + Math.min(150, textLength * 0.72);
+      const body =
+        note.kind === 'checklist'
+          ? note.items.map((i) => i.text).join(' ')
+          : note.html.replace(/<[^>]*>/g, ' ');
+      const estimate = 92 + Math.min(150, body.length * 0.62);
       const target = heights[0] <= heights[1] ? 0 : 1;
       cols[target].push(note);
       heights[target] += estimate;
@@ -65,59 +65,66 @@
     return cols;
   }
 
-  async function startSearch() {
-    searching = true;
-    await tick();
-    searchEl?.focus();
-  }
-
-  function stopSearch() {
-    searching = false;
-    query = '';
-  }
-
   function openActions(note: Note) {
     selectedId = note.id;
-    actionsOpen = true;
-  }
-
-  function closeActions() {
-    actionsOpen = false;
+    sheet = 'actions';
   }
 
   function togglePin() {
     if (!selected) return;
     notesStore.togglePin(selected.id);
-    actionsOpen = false;
+    sheet = null;
   }
 
   function duplicateNote() {
     if (!selected) return;
     const copy = notesStore.duplicate(selected);
-    actionsOpen = false;
+    sheet = null;
     onopen(copy.id);
   }
 
   function deleteNote() {
     if (!selected) return;
     notesStore.trashNote(selected.id);
-    actionsOpen = false;
+    sheet = null;
   }
 
   function chooseColor(color: NoteColorKey) {
     if (!selected) return;
     notesStore.setColor(selected.id, color);
-    colorOpen = false;
+    sheet = null;
   }
 
-  function chooseSort(sort: SortKey) {
-    notesStore.setSort(sort);
-    sortOpen = false;
+  function moveTo(folderId: string | null) {
+    if (!selected) return;
+    notesStore.setNoteFolder(selected.id, folderId);
+    sheet = null;
   }
 
-  function chooseTheme(theme: ThemeKey) {
-    notesStore.setTheme(theme);
-    themeOpen = false;
+  function selectFolder(folderId: string | null) {
+    notesStore.activeFolderId = folderId;
+    sheet = null;
+  }
+
+  async function startFolder() {
+    addingFolder = true;
+    await tick();
+    folderInput?.focus();
+  }
+
+  function confirmFolder() {
+    const folder = notesStore.createFolder(folderName);
+    folderName = '';
+    addingFolder = false;
+    if (folder) notesStore.activeFolderId = folder.id;
+    sheet = null;
+  }
+
+  async function removeFolder(folder: Folder) {
+    const ok = await confirmStore.ask(
+      `Supprimer le dossier « ${folder.name} » ? Les notes ne sont pas supprimées.`
+    );
+    if (ok) notesStore.deleteFolder(folder.id);
   }
 
   function later(fn: () => void) {
@@ -127,190 +134,200 @@
 
 <div class="home">
   <div class="scroll">
-    <header class="home-head" class:searching>
-      {#if searching}
-        <button class="icon-btn" onclick={stopSearch} aria-label="Fermer la recherche">
-          <Icon name="back" />
+    <div class="top-icons">
+      {#if tab === 'notes'}
+        <button
+          class="icon-btn"
+          onclick={() => (sheet = 'folders')}
+          aria-label="Dossiers"
+        >
+          <Icon name="folder" size={26} stroke={1.6} />
         </button>
-        <input
-          bind:this={searchEl}
-          bind:value={query}
-          class="search-input"
-          type="search"
-          placeholder="Rechercher des notes"
-          enterkeyhint="search"
-          autocomplete="off"
-        />
-        {#if query}
-          <button class="icon-btn" onclick={() => (query = '')} aria-label="Effacer">
-            <Icon name="close" size={20} />
-          </button>
-        {/if}
-      {:else}
-        <h1>Notes</h1>
-        <div class="head-actions">
-          <button class="icon-btn" onclick={startSearch} aria-label="Rechercher">
-            <Icon name="search" />
-          </button>
-          <button class="icon-btn" onclick={() => (menuOpen = true)} aria-label="Plus d'options">
-            <Icon name="more" />
-          </button>
-        </div>
       {/if}
-    </header>
+      <button class="icon-btn" onclick={onsettings} aria-label="Paramètres">
+        <Icon name="gear" size={25} stroke={1.6} />
+      </button>
+    </div>
 
-    {#if results.length > 0}
-      <div class="grid">
-        {#each columns as column, index (index)}
-          <div class="col">
-            {#each column as note (note.id)}
+    <h1 class="screen-title">
+      {tab === 'tasks' ? 'Tâches' : notesStore.activeFolder?.name || 'Notes'}
+    </h1>
+
+    {#if tab === 'notes'}
+      {#if notesStore.activeFolder}
+        <button class="clear-folder" onclick={() => (notesStore.activeFolderId = null)}>
+          Toutes les notes
+        </button>
+      {/if}
+
+      {#if notes.length}
+        {#if notesStore.layout === 'grid'}
+          <div class="grid">
+            {#each columns as column, index (index)}
+              <div class="col">
+                {#each column as note (note.id)}
+                  <NoteCard {note} onopen={onopen} onlong={openActions} />
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="list">
+            {#each notes as note (note.id)}
               <NoteCard {note} onopen={onopen} onlong={openActions} />
             {/each}
           </div>
-        {/each}
-      </div>
-    {:else if notesStore.ready}
-      <div class="empty">
-        <div class="empty-art">
-          <Icon name={query ? 'search' : 'note'} size={44} stroke={1.5} />
+        {/if}
+      {:else if notesStore.ready}
+        <div class="empty">
+          <div class="empty-art"><Icon name="note" size={42} stroke={1.5} /></div>
+          <p class="empty-title">Aucune note</p>
+          <p class="empty-sub">Appuyez sur + pour écrire votre première note</p>
         </div>
-        <p class="empty-title">{query ? 'Aucun résultat' : 'Aucune note'}</p>
-        <p class="empty-sub">
-          {query ? 'Essayez un autre mot-clé' : 'Appuyez sur + pour créer une note'}
-        </p>
-      </div>
+      {/if}
+    {:else}
+      {#if tasks.length}
+        <div class="tasks">
+          {#each tasks.filter((t) => !t.done) as task (`${task.noteId}:${task.itemId}`)}
+            <TaskCard {task} />
+          {/each}
+
+          {#if completedCount}
+            {#if showCompleted}
+              {#each tasks.filter((t) => t.done) as task (`${task.noteId}:${task.itemId}`)}
+                <TaskCard {task} />
+              {/each}
+            {/if}
+            <button class="show-completed" onclick={() => (showCompleted = !showCompleted)}>
+              {showCompleted
+                ? 'Masquer les tâches terminées'
+                : `Afficher les tâches terminées (${completedCount})`}
+            </button>
+          {/if}
+        </div>
+      {:else if notesStore.ready}
+        <div class="empty">
+          <div class="empty-art">
+            <Icon name="check-square" size={40} stroke={1.5} />
+          </div>
+          <p class="empty-title">Aucune tâche</p>
+          <p class="empty-sub">Ajoutez des cases à cocher dans une note pour les retrouver ici</p>
+        </div>
+      {/if}
     {/if}
   </div>
 
-  {#if !searching}
-    <button class="fab" onclick={() => onnew('text')} aria-label="Nouvelle note">
-      <Icon name="plus" size={27} stroke={2.1} />
-    </button>
-  {/if}
-
-  <!-- Menu principal -->
-  <Sheet open={menuOpen} onclose={() => (menuOpen = false)}>
-    <button
-      class="sheet-row"
-      onclick={() => {
-        menuOpen = false;
-        onnew('checklist');
-      }}
-    >
-      <Icon name="checklist" size={22} />
-      <span class="grow">Nouvelle liste</span>
-    </button>
-    <button
-      class="sheet-row"
-      onclick={() => {
-        menuOpen = false;
-        later(() => (sortOpen = true));
-      }}
-    >
-      <Icon name="sort" size={22} />
-      <span class="grow">Trier par</span>
-      <span class="muted">{sortLabels[notesStore.sort]}</span>
-    </button>
-    <button
-      class="sheet-row"
-      onclick={() => {
-        menuOpen = false;
-        later(() => (themeOpen = true));
-      }}
-    >
-      <Icon name="moon" size={22} />
-      <span class="grow">Apparence</span>
-      <span class="muted">{themeLabels[notesStore.theme]}</span>
-    </button>
-    <button
-      class="sheet-row"
-      onclick={() => {
-        menuOpen = false;
-        ontrash();
-      }}
-    >
-      <Icon name="trash" size={22} />
-      <span class="grow">Corbeille</span>
-      {#if notesStore.trash.length}
-        <span class="muted">{notesStore.trash.length}</span>
-      {/if}
-    </button>
-  </Sheet>
-
-  <!-- Tri -->
-  <Sheet open={sortOpen} onclose={() => (sortOpen = false)} title="Trier par">
-    {#each sortOptions as option (option)}
-      <button class="sheet-row" onclick={() => chooseSort(option)}>
-        <Icon name="sort" size={22} />
-        <span class="grow">{sortLabels[option]}</span>
-        {#if notesStore.sort === option}
-          <Icon name="check" size={20} class="check" />
-        {/if}
-      </button>
-    {/each}
-  </Sheet>
-
-  <!-- Apparence -->
-  <Sheet open={themeOpen} onclose={() => (themeOpen = false)} title="Apparence">
-    {#each themeOptions as option (option)}
-      <button class="sheet-row" onclick={() => chooseTheme(option)}>
-        <Icon name={themeIcons[option]} size={22} />
-        <span class="grow">{themeLabels[option]}</span>
-        {#if notesStore.theme === option}
-          <Icon name="check" size={20} class="check" />
-        {/if}
-      </button>
-    {/each}
-  </Sheet>
-
-  <!-- Actions sur une note -->
-  <Sheet
-    open={actionsOpen && !!selected}
-    onclose={closeActions}
-    title={selected?.title || 'Note'}
+  <button
+    class="fab"
+    onclick={onnew}
+    aria-label={tab === 'tasks' ? 'Nouvelle tâche' : 'Nouvelle note'}
   >
-    <button class="sheet-row" onclick={togglePin}>
-      <Icon name={selected?.pinned ? 'pin-filled' : 'pin'} size={22} />
-      <span class="grow">{selected?.pinned ? 'Désépingler' : 'Épingler'}</span>
-    </button>
-    <button
-      class="sheet-row"
-      onclick={() => {
-        actionsOpen = false;
-        later(() => (colorOpen = true));
-      }}
-    >
-      <Icon name="palette" size={22} />
-      <span class="grow">Couleur</span>
-    </button>
-    <button class="sheet-row" onclick={duplicateNote}>
-      <Icon name="copy" size={22} />
-      <span class="grow">Dupliquer</span>
-    </button>
-    <button class="sheet-row danger" onclick={deleteNote}>
-      <Icon name="trash" size={22} />
-      <span class="grow">Supprimer</span>
-    </button>
-  </Sheet>
+    <Icon name="plus" size={28} stroke={1.9} />
+  </button>
 
-  <!-- Couleurs -->
-  <Sheet open={colorOpen} onclose={() => (colorOpen = false)} title="Couleur de la note">
-    <div class="colors">
-      {#each NOTE_COLORS as color (color.key)}
-        <button
-          class="swatch-wrap"
-          onclick={() => chooseColor(color.key)}
-          aria-label={color.label}
-        >
-          <span class="swatch" data-note-color={color.key}>
-            {#if selected?.color === color.key}
-              <Icon name="check" size={16} stroke={2.6} />
+  <TabBar {tab} {ontab} />
+
+  <Sheet open={sheet !== null} onclose={() => (sheet = null)} title={sheetTitle}>
+    {#if sheet === 'actions'}
+      <button class="sheet-row" onclick={togglePin}>
+        <Icon name={selected?.pinned ? 'pin-filled' : 'pin'} size={22} />
+        <span class="grow">{selected?.pinned ? 'Désépingler' : 'Épingler'}</span>
+      </button>
+      <button class="sheet-row" onclick={() => later(() => (sheet = 'color'))}>
+        <Icon name="palette" size={22} />
+        <span class="grow">Couleur</span>
+      </button>
+      <button class="sheet-row" onclick={() => later(() => (sheet = 'move'))}>
+        <Icon name="folder" size={22} />
+        <span class="grow">Déplacer vers</span>
+      </button>
+      <button class="sheet-row" onclick={duplicateNote}>
+        <Icon name="copy" size={22} />
+        <span class="grow">Dupliquer</span>
+      </button>
+      <button class="sheet-row danger" onclick={deleteNote}>
+        <Icon name="trash" size={22} />
+        <span class="grow">Supprimer</span>
+      </button>
+    {:else if sheet === 'color'}
+      <div class="colors">
+        {#each NOTE_COLORS as color (color.key)}
+          <button
+            class="swatch-wrap"
+            onclick={() => chooseColor(color.key)}
+            aria-label={color.label}
+          >
+            <span class="swatch" data-note-color={color.key}>
+              {#if selected?.color === color.key}
+                <Icon name="check" size={16} stroke={2.6} />
+              {/if}
+            </span>
+            <span class="swatch-label">{color.label}</span>
+          </button>
+        {/each}
+      </div>
+    {:else if sheet === 'folders'}
+      <button class="sheet-row" onclick={() => selectFolder(null)}>
+        <Icon name="note" size={22} />
+        <span class="grow">Toutes les notes</span>
+        <span class="muted">{notesStore.countFolder(null)}</span>
+        {#if !notesStore.activeFolderId}<Icon name="check" size={18} class="check" />{/if}
+      </button>
+      {#each notesStore.folders as folder (folder.id)}
+        <div class="folder-line">
+          <button class="sheet-row folder-pick" onclick={() => selectFolder(folder.id)}>
+            <Icon name="folder" size={22} />
+            <span class="grow">{folder.name}</span>
+            <span class="muted">{notesStore.countFolder(folder.id)}</span>
+            {#if notesStore.activeFolderId === folder.id}
+              <Icon name="check" size={18} class="check" />
             {/if}
-          </span>
-          <span class="swatch-label">{color.label}</span>
+          </button>
+          <button
+            class="icon-btn folder-del"
+            onclick={() => removeFolder(folder)}
+            aria-label={`Supprimer ${folder.name}`}
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      {/each}
+      {#if addingFolder}
+        <div class="new-folder">
+          <input
+            class="new-folder-input"
+            bind:this={folderInput}
+            bind:value={folderName}
+            placeholder="Nom du dossier"
+            autocomplete="off"
+            onkeydown={(event) => {
+              if (event.key === 'Enter') confirmFolder();
+            }}
+          />
+          <button class="text-btn" onclick={confirmFolder}>Créer</button>
+        </div>
+      {:else}
+        <button class="sheet-row" onclick={startFolder}>
+          <Icon name="plus" size={22} />
+          <span class="grow">Nouveau dossier</span>
+        </button>
+      {/if}
+    {:else if sheet === 'move'}
+      <button class="sheet-row" onclick={() => moveTo(null)}>
+        <Icon name="note" size={22} />
+        <span class="grow">Aucun dossier</span>
+        {#if selected && !selected.folderId}<Icon name="check" size={18} class="check" />{/if}
+      </button>
+      {#each notesStore.folders as folder (folder.id)}
+        <button class="sheet-row" onclick={() => moveTo(folder.id)}>
+          <Icon name="folder" size={22} />
+          <span class="grow">{folder.name}</span>
+          {#if selected?.folderId === folder.id}
+            <Icon name="check" size={18} class="check" />
+          {/if}
         </button>
       {/each}
-    </div>
+    {/if}
   </Sheet>
 </div>
 
@@ -321,63 +338,40 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: var(--bg);
   }
 
   .scroll {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 118px;
+    padding-bottom: calc(150px + var(--safe-bottom));
   }
 
-  .home-head {
-    position: sticky;
-    top: 0;
-    z-index: 10;
+  .top-icons {
     display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: calc(var(--safe-top) + 12px) 10px 8px 18px;
-    background: var(--bg);
+    justify-content: flex-end;
+    gap: 2px;
+    padding: calc(var(--safe-top) + 6px) 14px 0;
+    color: var(--text);
   }
 
-  .home-head h1 {
-    flex: 1;
-    margin: 0;
-    font-size: 29px;
-    font-weight: 700;
-    letter-spacing: -0.8px;
-    line-height: 1.15;
+  .screen-title {
+    padding-top: 24px;
   }
 
-  .head-actions {
-    display: flex;
-    gap: 0;
-    margin-right: 2px;
-  }
-
-  .search-input {
-    flex: 1;
-    height: 42px;
-    min-width: 0;
-    border: 0;
-    border-radius: 21px;
-    background: var(--surface-2);
-    padding: 0 16px;
-    font-size: 16px;
-    outline: none;
-    -webkit-appearance: none;
-    appearance: none;
-  }
-  .search-input::-webkit-search-cancel-button {
-    display: none;
+  .clear-folder {
+    display: block;
+    margin: 14px 18px -2px;
+    font-size: 13.5px;
+    color: var(--text-3);
   }
 
   .grid {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 4px 12px 0;
+    gap: 12px;
+    padding: 22px 18px 0;
   }
 
   .col {
@@ -385,15 +379,39 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 12px;
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
+    padding: 22px 16px 0;
+  }
+
+  .tasks {
+    padding: 22px 18px 0;
+  }
+
+  .show-completed {
+    display: block;
+    margin: 14px auto 0;
+    padding: 8px 14px;
+    font-size: 13.5px;
+    color: var(--text-3);
+    border-radius: 12px;
+  }
+  .show-completed:active {
+    background: var(--surface-2);
   }
 
   .fab {
     position: absolute;
-    right: 18px;
-    bottom: calc(22px + var(--safe-bottom));
-    width: 58px;
-    height: 58px;
+    right: 20px;
+    bottom: calc(64px + var(--safe-bottom) + 20px);
+    z-index: 20;
+    width: 61px;
+    height: 61px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
@@ -401,7 +419,6 @@
     place-items: center;
     box-shadow: var(--shadow-fab);
     transition: transform 0.14s var(--ease);
-    z-index: 20;
   }
 
   .fab:active {
@@ -410,6 +427,43 @@
 
   :global(.check) {
     color: var(--accent);
+  }
+
+  .folder-line {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .folder-pick {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .folder-del {
+    width: 34px;
+    height: 34px;
+    margin-right: 6px;
+    color: var(--text-3);
+  }
+
+  .new-folder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px 4px;
+  }
+
+  .new-folder-input {
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-2);
+    padding: 0 14px;
+    font-size: 16px;
+    outline: none;
   }
 
   .colors {
@@ -435,7 +489,7 @@
     display: grid;
     place-items: center;
     color: var(--text);
-    background: var(--card-bg, var(--surface));
+    background: var(--card-bg, var(--surface-2));
     border: 1px solid var(--line);
   }
 

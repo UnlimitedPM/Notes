@@ -26,9 +26,29 @@ export interface Note {
   items: ChecklistItem[];
   color: NoteColorKey;
   pinned: boolean;
+  folderId: string | null;
   tags: string[];
   createdAt: number;
   updatedAt: number;
   /** Horodatage de mise à la corbeille, null si active. */
   deletedAt: number | null;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+}
+
+export type SortKey = 'updated' | 'created' | 'title';
+export type ThemeKey = 'system' | 'light' | 'dark';
+export type TextSizeKey = 'small' | 'medium' | 'large';
+export type LayoutKey = 'grid' | 'list';
+
+export interface TaskEntry {
+  noteId: string;
+  itemId: string;
+  text: string;
+  done: boolean;
+  noteTitle: string;
+  noteUpdatedAt: number;
 }

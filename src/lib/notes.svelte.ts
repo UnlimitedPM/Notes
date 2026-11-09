@@ -1,9 +1,17 @@
-import type { ChecklistItem, Note, NoteColorKey, NoteKind } from './types';
+import type {
+  ChecklistItem,
+  Folder,
+  LayoutKey,
+  Note,
+  NoteColorKey,
+  NoteKind,
+  SortKey,
+  TaskEntry,
+  TextSizeKey,
+  ThemeKey
+} from './types';
 import { deleteAllNotes, deleteNote, loadAllNotes, saveNote, saveNotes } from './db';
 import { plainText } from './format';
-
-export type SortKey = 'updated' | 'created' | 'title';
-export type ThemeKey = 'system' | 'light' | 'dark';
 
 export function uid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -16,7 +24,7 @@ export function cloneItems(items: ChecklistItem[]): ChecklistItem[] {
   return items.map((i) => ({ id: i.id, text: i.text, done: i.done }));
 }
 
-function readSetting<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+function readString<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
     const value = localStorage.getItem(key) as T | null;
     return value && allowed.includes(value) ? value : fallback;
@@ -25,7 +33,16 @@ function readSetting<T extends string>(key: string, allowed: readonly T[], fallb
   }
 }
 
-function writeSetting(key: string, value: string): void {
+function readBool(key: string, fallback: boolean): boolean {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+function write(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {
@@ -33,7 +50,20 @@ function writeSetting(key: string, value: string): void {
   }
 }
 
-/** Minuscules sans accents, pour une recherche tolérante. */
+function readFolders(): Folder[] {
+  try {
+    const raw = localStorage.getItem('notes:folders');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((f): f is Folder => !!f && typeof f === 'object' && typeof (f as Folder).id === 'string')
+      .map((f) => ({ id: f.id, name: String(f.name ?? 'Dossier') }));
+  } catch {
+    return [];
+  }
+}
+
 function normalize(value: string): string {
   return value
     .toLowerCase()
@@ -41,88 +71,113 @@ function normalize(value: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-/** Version sans ponctuation : permet à « wifi » de trouver « Wi-Fi ». */
 function compact(value: string): string {
   return normalize(value).replace(/[^a-z0-9]+/g, '');
-}
-
-function newNote(kind: NoteKind, now = Date.now()): Note {
-  return {
-    id: uid(),
-    kind,
-    title: '',
-    html: '',
-    items: kind === 'checklist' ? [{ id: uid(), text: '', done: false }] : [],
-    color: 'default',
-    pinned: false,
-    tags: [],
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null
-  };
 }
 
 function seedNotes(): Note[] {
   const now = Date.now();
   const min = 60_000;
+  const base = { color: 'default' as NoteColorKey, pinned: false, folderId: null, tags: [] };
 
   const welcome: Note = {
-    ...newNote('text', now - 2 * min),
+    ...base,
+    id: uid(),
+    kind: 'text',
     title: 'Bienvenue dans Notes',
-    color: 'yellow',
-    pinned: true,
+    createdAt: now - 3 * min,
+    updatedAt: now - 3 * min,
+    deletedAt: null,
+    items: [],
     html:
-      '<div>Un carnet rapide, façon MIUI, qui fonctionne hors ligne sur Android et iPhone.</div>' +
+      '<div>Un carnet rapide, noir et léger, qui fonctionne hors ligne sur Android et iPhone.</div>' +
       '<div><br></div>' +
-      '<div>• <b>+</b> pour créer une note</div>' +
-      '<div>• Maintenir une note pour l’épingler, la colorer ou la supprimer</div>' +
-      '<div>• <b>Aa</b> en bas pour mettre en forme le texte</div>' +
-      '<div>• Le bouton liste transforme la note en cases à cocher</div>' +
-      '<div>• Le bouton appareil photo insère une image</div>' +
-      '<div><br></div>' +
-      '<div>Tout est stocké sur l’appareil. La synchronisation auto-hébergée viendra ensuite.</div>'
+      '<div>• Appuyez sur + pour créer une note</div>' +
+      '<div>• Touchez une note pour la lire, touchez le texte pour l’éditer</div>' +
+      '<div>• Maintenez une carte pour la colorer, la déplacer ou la supprimer</div>' +
+      '<div>• Le bouton en forme de case transforme la note en liste</div>' +
+      '<div>• Les cases cochées se retrouvent dans l’onglet Tâches</div>'
   };
 
-  const shopping: Note = {
-    ...newNote('checklist', now - 26 * min),
-    title: 'Liste de courses',
-    color: 'green',
+  const tasks: Note = {
+    ...base,
+    id: uid(),
+    kind: 'checklist',
+    title: 'À faire',
+    createdAt: now - 40 * min,
+    updatedAt: now - 40 * min,
+    deletedAt: null,
+    html: '',
     items: [
-      { id: uid(), text: 'Lait', done: false },
-      { id: uid(), text: 'Pain complet', done: false },
-      { id: uid(), text: 'Café', done: true },
-      { id: uid(), text: 'Tomates', done: false },
-      { id: uid(), text: 'Huile d’olive', done: false }
+      { id: uid(), text: 'Bienvenue dans Tâches !', done: false },
+      { id: uid(), text: 'Appuyez sur une tâche pour modifier son texte.', done: false },
+      { id: uid(), text: 'Cochez la case pour marquer une tâche terminée.', done: false },
+      { id: uid(), text: 'Le bouton + crée une nouvelle liste.', done: true }
     ]
   };
 
   const ideas: Note = {
-    ...newNote('text', now - 3 * 60 * min),
+    ...base,
+    id: uid(),
+    kind: 'text',
     title: 'Idées',
-    color: 'blue',
+    createdAt: now - 26 * 60 * min,
+    updatedAt: now - 26 * 60 * min,
+    deletedAt: null,
+    items: [],
     html:
-      '<div>— Vue grille avec épinglage</div>' +
-      '<div>— Recherche instantanée</div>' +
-      '<div>— Mode sombre automatique</div>' +
-      '<div>— Sauvegarde locale IndexedDB</div>' +
-      '<div>— Synchro à ajouter plus tard</div>'
+      '<div>— Thème AMOLED fidèle à MIUI</div>' +
+      '<div>— Synchro auto-hébergée plus tard</div>' +
+      '<div>— Import / export JSON</div>' +
+      '<div>— Notes vocales et dessin</div>'
+  };
+
+  const shopping: Note = {
+    ...base,
+    id: uid(),
+    kind: 'checklist',
+    title: 'Liste de courses',
+    createdAt: now - 9 * 24 * 60 * min,
+    updatedAt: now - 9 * 24 * 60 * min,
+    deletedAt: null,
+    html: '',
+    items: [
+      { id: uid(), text: 'Lait', done: false },
+      { id: uid(), text: 'Pain complet', done: false },
+      { id: uid(), text: 'Café', done: true },
+      { id: uid(), text: 'Tomates', done: false }
+    ]
   };
 
   const wifi: Note = {
-    ...newNote('text', now - 2 * 24 * 60 * min),
+    ...base,
+    id: uid(),
+    kind: 'text',
     title: 'Wi-Fi maison',
-    color: 'gray',
-    html: '<div>Réseau : Maison-5G</div><div>Mot de passe : à garder ici</div>'
+    createdAt: now - 31 * 24 * 60 * min,
+    updatedAt: now - 31 * 24 * 60 * min,
+    deletedAt: null,
+    items: [],
+    html: '<div>Réseau : Maison</div><div>Mot de passe : à garder ici</div>'
   };
 
-  return [welcome, shopping, ideas, wifi];
+  return [welcome, tasks, ideas, shopping, wifi];
 }
 
 class NotesStore {
   notes = $state<Note[]>([]);
   ready = $state(false);
-  sort = $state<SortKey>(readSetting('notes:sort', ['updated', 'created', 'title'], 'updated'));
-  theme = $state<ThemeKey>(readSetting('notes:theme', ['system', 'light', 'dark'], 'system'));
+  folders = $state<Folder[]>(readFolders());
+  activeFolderId = $state<string | null>(null);
+
+  sort = $state<SortKey>(readString('notes:sort', ['updated', 'created', 'title'], 'updated'));
+  theme = $state<ThemeKey>(readString('notes:theme', ['system', 'light', 'dark'], 'system'));
+  textSize = $state<TextSizeKey>(
+    readString('notes:textSize', ['small', 'medium', 'large'], 'medium')
+  );
+  layout = $state<LayoutKey>(readString('notes:layout', ['grid', 'list'], 'grid'));
+  quickNotes = $state(readBool('notes:quickNotes', true));
+  highPriorityReminders = $state(readBool('notes:reminders', false));
 
   private started = false;
 
@@ -142,6 +197,35 @@ class NotesStore {
     return [...list.filter((n) => n.pinned).sort(cmp), ...list.filter((n) => !n.pinned).sort(cmp)];
   }
 
+  get visibleNotes(): Note[] {
+    const list = this.sorted;
+    return this.activeFolderId ? list.filter((n) => n.folderId === this.activeFolderId) : list;
+  }
+
+  get activeFolder(): Folder | null {
+    return this.folders.find((f) => f.id === this.activeFolderId) ?? null;
+  }
+
+  /** Toutes les tâches (cases à cocher) de toutes les listes, non terminées d'abord. */
+  get tasks(): TaskEntry[] {
+    const out: TaskEntry[] = [];
+    for (const note of this.sorted) {
+      if (note.kind !== 'checklist') continue;
+      for (const item of note.items) {
+        if (!item.text.trim()) continue;
+        out.push({
+          noteId: note.id,
+          itemId: item.id,
+          text: item.text,
+          done: item.done,
+          noteTitle: note.title,
+          noteUpdatedAt: note.updatedAt
+        });
+      }
+    }
+    return [...out.filter((t) => !t.done), ...out.filter((t) => t.done)];
+  }
+
   private comparator(sort: SortKey) {
     if (sort === 'title') {
       return (a: Note, b: Note) =>
@@ -154,10 +238,9 @@ class NotesStore {
   }
 
   search(query: string): Note[] {
-    const base = this.sorted;
+    const base = this.visibleNotes;
     const term = query.trim();
     if (!term) return base;
-
     const loose = normalize(term);
     const compactTerm = compact(term);
     return base.filter((n) => {
@@ -181,22 +264,38 @@ class NotesStore {
       if (notes.length === 0 && !seeded) {
         notes = seedNotes();
         seeded = true;
-        writeSetting('notes:seed', '1');
+        write('notes:seed', '1');
         await saveNotes(notes);
       }
-      this.notes = notes;
+      // Compatibilité avec d'anciennes données
+      this.notes = notes.map((n) => ({ ...n, folderId: n.folderId ?? null }));
     } catch (error) {
       console.error('Chargement des notes impossible', error);
     } finally {
       this.ready = true;
       this.applyTheme();
+      this.applyPrefs();
       this.watchSystemTheme();
     }
   }
 
   create(kind: NoteKind, patch: Partial<Note> = {}): Note {
     const now = Date.now();
-    const note: Note = { ...newNote(kind, now), ...patch };
+    const note: Note = {
+      id: uid(),
+      kind,
+      title: '',
+      html: '',
+      items: kind === 'checklist' ? [{ id: uid(), text: '', done: false }] : [],
+      color: 'default',
+      pinned: false,
+      folderId: this.activeFolderId,
+      tags: [],
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      ...patch
+    };
     this.notes.unshift(note);
     void saveNote(note);
     return note;
@@ -238,6 +337,20 @@ class NotesStore {
     if (note) void this.update(id, { pinned: !note.pinned });
   }
 
+  toggleTask(noteId: string, itemId: string): void {
+    const note = this.notes.find((n) => n.id === noteId);
+    if (!note) return;
+    const items = note.items.map((i) => (i.id === itemId ? { ...i, done: !i.done } : { ...i }));
+    void this.update(noteId, { items });
+  }
+
+  setTaskText(noteId: string, itemId: string, text: string): void {
+    const note = this.notes.find((n) => n.id === noteId);
+    if (!note) return;
+    const items = note.items.map((i) => (i.id === itemId ? { ...i, text } : { ...i }));
+    void this.update(noteId, { items });
+  }
+
   trashNote(id: string): void {
     void this.update(id, { deletedAt: Date.now() });
   }
@@ -264,13 +377,68 @@ class NotesStore {
 
   setSort(sort: SortKey): void {
     this.sort = sort;
-    writeSetting('notes:sort', sort);
+    write('notes:sort', sort);
   }
 
   setTheme(theme: ThemeKey): void {
     this.theme = theme;
-    writeSetting('notes:theme', theme);
+    write('notes:theme', theme);
     this.applyTheme();
+  }
+
+  setTextSize(size: TextSizeKey): void {
+    this.textSize = size;
+    write('notes:textSize', size);
+    this.applyPrefs();
+  }
+
+  setLayout(layout: LayoutKey): void {
+    this.layout = layout;
+    write('notes:layout', layout);
+  }
+
+  setQuickNotes(value: boolean): void {
+    this.quickNotes = value;
+    write('notes:quickNotes', value ? '1' : '0');
+  }
+
+  setHighPriorityReminders(value: boolean): void {
+    this.highPriorityReminders = value;
+    write('notes:reminders', value ? '1' : '0');
+  }
+
+  createFolder(name: string): Folder | null {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const folder: Folder = { id: uid(), name: trimmed };
+    this.folders = [...this.folders, folder];
+    write('notes:folders', JSON.stringify(this.folders));
+    return folder;
+  }
+
+  renameFolder(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.folders = this.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f));
+    write('notes:folders', JSON.stringify(this.folders));
+  }
+
+  deleteFolder(id: string): void {
+    this.folders = this.folders.filter((f) => f.id !== id);
+    write('notes:folders', JSON.stringify(this.folders));
+    if (this.activeFolderId === id) this.activeFolderId = null;
+    for (const note of this.notes.filter((n) => n.folderId === id)) {
+      void this.update(note.id, { folderId: null });
+    }
+  }
+
+  setNoteFolder(noteId: string, folderId: string | null): void {
+    void this.update(noteId, { folderId });
+  }
+
+  countFolder(folderId: string | null): number {
+    const list = this.active;
+    return folderId ? list.filter((n) => n.folderId === folderId).length : list.length;
   }
 
   applyTheme(): void {
@@ -279,7 +447,12 @@ class NotesStore {
     const resolved = this.theme === 'system' ? (dark ? 'dark' : 'light') : this.theme;
     document.documentElement.dataset.theme = resolved;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0d0d0f' : '#f4f4f6');
+    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#000000' : '#ffffff');
+  }
+
+  applyPrefs(): void {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.textSize = this.textSize;
   }
 
   private watchSystemTheme(): void {

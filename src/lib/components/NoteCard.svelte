@@ -1,6 +1,5 @@
 <script lang="ts">
-  import Icon from './Icon.svelte';
-  import { formatCardDate, plainText } from '../format';
+  import { formatCardDate, htmlToText } from '../format';
   import type { Note } from '../types';
 
   interface Props {
@@ -14,7 +13,14 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
   let longPressed = false;
 
-  const text = $derived(plainText(note));
+  const preview = $derived(
+    note.kind === 'checklist'
+      ? note.items
+          .map((i) => i.text)
+          .filter(Boolean)
+          .join('\n')
+      : htmlToText(note.html)
+  );
 
   function pressStart() {
     longPressed = false;
@@ -57,64 +63,36 @@
   {#if note.title}
     <h3 class="card-title">{note.title}</h3>
   {/if}
-
-  {#if note.kind === 'checklist'}
-    <div class="card-checks">
-      {#each note.items.slice(0, 3) as item (item.id)}
-        <div class="mini-row" class:done={item.done}>
-          <span class="mini-box">
-            {#if item.done}<Icon name="check" size={9} stroke={3.4} />{/if}
-          </span>
-          <span class="mini-text">{item.text || 'Élément'}</span>
-        </div>
-      {/each}
-      {#if note.items.length > 3}
-        <div class="mini-more">+{note.items.length - 3}</div>
-      {/if}
-    </div>
-  {:else if text}
-    <p class="card-snippet">{text}</p>
-  {/if}
-
-  <div class="card-foot">
-    <span class="card-date">{formatCardDate(note.updatedAt)}</span>
-    {#if note.pinned}
-      <Icon name="pin" size={13} stroke={1.7} class="pin" />
-    {/if}
-  </div>
+  <p class="card-text">{preview || 'Pas de texte'}</p>
+  <span class="card-date">{formatCardDate(note.updatedAt)}</span>
 </button>
 
 <style>
   .note-card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
     width: 100%;
-    padding: 13px 14px 10px;
+    min-height: 118px;
+    padding: 16px;
     text-align: left;
-    border-radius: 16px;
-    background: var(--card-bg, var(--surface));
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow-card);
-    transition: transform 0.12s ease;
+    border-radius: 18px;
+    background: var(--card-bg, var(--surface-2));
+    color: var(--text);
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    transition: transform 0.12s ease;
   }
 
   .note-card:active {
     transform: scale(0.985);
   }
 
-  [data-note-color]:not([data-note-color='default']) {
-    border-color: transparent;
-  }
-
   .card-title {
     margin: 0;
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.35;
+    font-size: var(--card-title);
+    font-weight: 700;
+    line-height: 1.32;
     letter-spacing: -0.1px;
     display: -webkit-box;
     -webkit-line-clamp: 3;
@@ -124,86 +102,26 @@
     overflow-wrap: anywhere;
   }
 
-  .card-snippet {
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.45;
+  .card-text {
+    margin: 10px 0 0;
+    font-size: var(--card-text);
+    line-height: 1.5;
     color: var(--text-2);
     white-space: pre-line;
-    display: -webkit-box;
-    -webkit-line-clamp: 6;
-    line-clamp: 6;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
     overflow-wrap: anywhere;
-  }
-
-  .card-checks {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 1px;
-  }
-
-  .mini-row {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 13px;
-    line-height: 1.35;
-    color: var(--text-2);
-    min-width: 0;
-  }
-
-  .mini-row.done .mini-text {
-    color: var(--text-3);
-    text-decoration: line-through;
-  }
-
-  .mini-box {
-    flex: 0 0 auto;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 1.4px solid var(--text-3);
-    display: grid;
-    place-items: center;
-    color: #fff;
-    background: transparent;
-  }
-
-  .mini-row.done .mini-box {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
-  .mini-text {
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .mini-more {
-    font-size: 12px;
-    color: var(--text-3);
-    padding-left: 21px;
-  }
-
-  .card-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    margin-top: auto;
-    padding-top: 3px;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    -webkit-box-orient: vertical;
   }
 
   .card-date {
-    font-size: 11.5px;
+    display: block;
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 13px;
+    line-height: 1.2;
     color: var(--text-3);
-  }
-
-  :global(.pin) {
-    color: var(--accent);
   }
 </style>

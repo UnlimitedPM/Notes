@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { notesStore } from '../notes.svelte';
+  import { confirmStore } from '../confirm.svelte';
   import { formatDay } from '../format';
 
   interface Props {
@@ -9,25 +10,28 @@
 
   let { onclose }: Props = $props();
 
-  function purge(id: string) {
-    if (confirm('Supprimer définitivement cette note ?')) notesStore.purge(id);
+  async function purge(id: string) {
+    const ok = await confirmStore.ask('Supprimer définitivement cette note ?');
+    if (ok) notesStore.purge(id);
   }
 
-  function emptyTrash() {
-    if (confirm('Vider la corbeille ? Cette action est définitive.')) notesStore.emptyTrash();
+  async function emptyTrash() {
+    const ok = await confirmStore.ask('Vider la corbeille ? Cette action est définitive.', 'Vider');
+    if (ok) notesStore.emptyTrash();
   }
 </script>
 
 <div class="trash">
   <header class="trash-head">
     <button class="icon-btn" onclick={onclose} aria-label="Retour">
-      <Icon name="back" />
+      <Icon name="back" size={25} />
     </button>
-    <h1>Corbeille</h1>
     {#if notesStore.trash.length}
       <button class="text-btn" onclick={emptyTrash}>Vider</button>
     {/if}
   </header>
+
+  <h1 class="screen-title">Corbeille</h1>
 
   <div class="trash-scroll">
     {#if notesStore.trash.length}
@@ -57,9 +61,7 @@
       {/each}
     {:else}
       <div class="empty">
-        <div class="empty-art">
-          <Icon name="trash" size={40} stroke={1.5} />
-        </div>
+        <div class="empty-art"><Icon name="trash" size={38} stroke={1.5} /></div>
         <p class="empty-title">Corbeille vide</p>
         <p class="empty-sub">Les notes supprimées apparaissent ici</p>
       </div>
@@ -72,48 +74,42 @@
     height: 100dvh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
   }
 
   .trash-head {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: calc(var(--safe-top) + 10px) 12px 8px 8px;
-  }
-
-  .trash-head h1 {
-    flex: 1;
-    margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
+    justify-content: space-between;
+    padding: calc(var(--safe-top) + 4px) 12px 0 8px;
   }
 
   .trash-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 0 12px 120px;
+    -webkit-overflow-scrolling: touch;
+    padding: 22px 16px calc(40px + var(--safe-bottom));
   }
 
   .trash-row {
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 12px 4px 12px 16px;
-    border-radius: 16px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    margin-bottom: 8px;
+    padding: 16px 8px 16px 18px;
+    border-radius: 18px;
+    background: var(--card-bg, var(--surface-2));
+    margin-bottom: 10px;
   }
 
   .trash-main {
     flex: 1;
     min-width: 0;
-    padding-right: 6px;
+    padding-right: 8px;
   }
 
   .trash-title {
-    font-size: 15.5px;
+    font-size: 16.5px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -121,8 +117,8 @@
   }
 
   .trash-date {
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--text-3);
-    margin-top: 2px;
+    margin-top: 3px;
   }
 </style>

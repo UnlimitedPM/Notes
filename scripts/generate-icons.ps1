@@ -23,7 +23,7 @@ function New-MasterBitmap {
 
   # Fond jaune arrondi
   $bg = New-RoundedPath 0 0 1024 1024 232
-  $yellow = New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#FFC83D'))
+  $yellow = New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#FFB300'))
   $g.FillPath($yellow, $bg)
 
   # Page blanche
@@ -33,7 +33,7 @@ function New-MasterBitmap {
 
   # Ligne de titre
   $title = New-RoundedPath 352 352 320 40 20
-  $accent = New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#F2B51E'))
+  $accent = New-Object System.Drawing.SolidBrush ([System.Drawing.ColorTranslator]::FromHtml('#E09B00'))
   $g.FillPath($accent, $title)
 
   # Lignes de texte

@@ -2,17 +2,20 @@
   import { onMount } from 'svelte';
   import HomeScreen from './lib/components/HomeScreen.svelte';
   import EditorScreen from './lib/components/EditorScreen.svelte';
+  import SettingsScreen from './lib/components/SettingsScreen.svelte';
   import TrashScreen from './lib/components/TrashScreen.svelte';
+  import Toast from './lib/components/Toast.svelte';
+  import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import { notesStore } from './lib/notes.svelte';
-  import type { NoteKind } from './lib/types';
 
-  type View = 'home' | 'editor' | 'trash';
+  type Screen = 'home' | 'note' | 'settings' | 'trash';
 
-  let view = $state<View>('home');
-  let editingId = $state<string | null>(null);
+  let screen = $state<Screen>('home');
+  let homeTab = $state<'notes' | 'tasks'>('notes');
+  let noteId = $state<string | null>(null);
 
   const current = $derived(
-    editingId ? (notesStore.notes.find((n) => n.id === editingId) ?? null) : null
+    noteId ? (notesStore.notes.find((n) => n.id === noteId) ?? null) : null
   );
 
   $effect(() => {
@@ -20,9 +23,13 @@
   });
 
   $effect(() => {
-    if (view === 'editor' && !current) {
-      view = 'home';
-      editingId = null;
+    notesStore.applyPrefs();
+  });
+
+  $effect(() => {
+    if (screen === 'note' && !current) {
+      screen = 'home';
+      noteId = null;
     }
   });
 
@@ -30,49 +37,73 @@
     void notesStore.init();
 
     const onPop = () => {
-      if (view === 'editor' || view === 'trash') {
-        view = 'home';
-        editingId = null;
+      if (screen !== 'home') {
+        screen = 'home';
+        noteId = null;
       }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   });
 
-  function openNote(id: string) {
-    editingId = id;
-    view = 'editor';
-    history.pushState({ screen: 'editor' }, '');
+  function push(screenName: Screen) {
+    screen = screenName;
+    history.pushState({ screen: screenName }, '');
   }
 
-  function createNote(kind: NoteKind) {
-    const note = notesStore.create(kind);
+  function openNote(id: string) {
+    noteId = id;
+    push('note');
+  }
+
+  function createNote() {
+    const note =
+      homeTab === 'tasks' ? notesStore.create('checklist') : notesStore.create('text');
     openNote(note.id);
   }
 
+  function openSettings() {
+    push('settings');
+  }
+
   function openTrash() {
-    view = 'trash';
-    history.pushState({ screen: 'trash' }, '');
+    push('trash');
   }
 
   function goHome() {
     if (history.state?.screen) {
       history.back();
     } else {
-      view = 'home';
-      editingId = null;
+      screen = 'home';
+      noteId = null;
     }
+  }
+
+  function switchTab(tab: 'notes' | 'tasks') {
+    homeTab = tab;
+    notesStore.activeFolderId = null;
   }
 </script>
 
 <div class="app">
-  {#if view === 'editor' && current}
+  {#if screen === 'note' && current}
     {#key current.id}
       <EditorScreen note={current} onclose={goHome} />
     {/key}
-  {:else if view === 'trash'}
+  {:else if screen === 'settings'}
+    <SettingsScreen onclose={goHome} ontrash={openTrash} />
+  {:else if screen === 'trash'}
     <TrashScreen onclose={goHome} />
   {:else}
-    <HomeScreen onopen={openNote} onnew={createNote} ontrash={openTrash} />
+    <HomeScreen
+      tab={homeTab}
+      ontab={switchTab}
+      onopen={openNote}
+      onnew={createNote}
+      onsettings={openSettings}
+    />
   {/if}
+
+  <Toast />
+  <ConfirmDialog />
 </div>
