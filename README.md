@@ -10,7 +10,7 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 | Écran | Détails |
 | --- | --- |
 | **Notes** | Recherche, chips de catégories, grille 2 colonnes, vignettes d'images, dates « 12:12 / Hier 18:51 / 6 Novembre » |
-| **Tâches** | Toutes les cases à cocher de toutes les notes, éditables sur place, ajout rapide par panneau |
+| **Tâches** | Liste de tâches autonome (séparée des notes), édition sur place, ajout rapide par panneau |
 | **Note** | Lecture puis édition au toucher : annuler / rétablir / valider, texte + cases mélangés |
 | **Format** | Barre H1 · H2 · H3 · Gras · Italique · Surligner · Effacer, avec états actifs |
 | **Sélection** | Appui long : sélection multiple, Tout sélectionner, Masquer / Épingler / Déplacer / Supprimer |
@@ -22,12 +22,14 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 
 - **Cases à cocher dans le texte** : le bouton case transforme la ligne courante, on peut
   mélanger paragraphes et tâches. Entrée crée la sous-tâche suivante, un tap sur la case la coche.
-- **Tâches agrégées** : toute ligne cochable apparaît dans l'onglet Tâches, quelle que soit la note
-  (les anciennes listes sont migrées automatiquement).
+- **Tâches séparées des notes** : l'onglet Tâches a sa propre liste, créée via le panneau
+  « Appuyez sur Entrée pour créer des sous-tâches ». Une case ajoutée dans une note reste dans
+  la note ; elle n'apparaît pas dans Tâches, et une tâche ne crée jamais de carte dans Notes.
+  Les anciennes listes stockées comme notes sont migrées vers les tâches au premier lancement.
 - **Formatage réversible** : chaque bouton s'active en ambre et se désactive au second appui,
   la sélection est préservée entre les appuis.
 - **Création rapide de tâche** : le + de l'onglet Tâches ouvre le panneau « Appuyez sur Entrée
-  pour créer des sous-tâches » (rappel + Terminé), il ne crée pas une note vide.
+  pour créer des sous-tâches » (rappel + Terminé) ; il ajoute des tâches, pas des notes.
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.
 - **Titre de secours** : sans titre, la première ligne du texte devient le titre de la carte.
 - **Dates** : heure pour aujourd'hui, `Hier HH:MM`, sinon jour + mois capitalisé.
@@ -80,7 +82,7 @@ src/
 
 IndexedDB `notes-app` / store `notes`. Préférences et dossiers : `localStorage`
 (`notes:theme`, `notes:sort`, `notes:textSize`, `notes:layout`, `notes:quickNotes`,
-`notes:reminders`, `notes:showHidden`, `notes:folders`, `notes:seed`).
+`notes:reminders`, `notes:showHidden`, `notes:tasks`, `notes:folders`, `notes:seed`).
 
 Les listes d'avant la v0.3 (`kind: checklist`) sont converties en lignes de cases HTML au
 premier lancement, sans perte de texte ni d'état coché.

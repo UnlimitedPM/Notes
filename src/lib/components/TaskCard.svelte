@@ -2,10 +2,10 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import { notesStore } from '../notes.svelte';
-  import type { TaskEntry } from '../types';
+  import type { TaskItem } from '../types';
 
   interface Props {
-    task: TaskEntry;
+    task: TaskItem;
   }
 
   let { task }: Props = $props();
@@ -15,13 +15,11 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   // svelte-ignore state_referenced_locally
-  const index = task.index;
-  // svelte-ignore state_referenced_locally
-  const noteId = task.noteId;
+  const id = task.id;
 
   function commit() {
     clearTimeout(timer);
-    if (text !== task.text) notesStore.setTaskText(noteId, index, text);
+    if (text !== task.text) notesStore.setTaskText(id, text);
   }
 
   function onInput() {
@@ -57,7 +55,7 @@
 <div class="task-card" class:done={task.done}>
   <button
     class="task-check"
-    onclick={() => notesStore.toggleTask(noteId, index)}
+    onclick={() => notesStore.toggleTask(id)}
     aria-label={task.done ? 'Décocher la tâche' : 'Cocher la tâche'}
   >
     {#if task.done}<Icon name="check" size={16} stroke={3.2} />{/if}

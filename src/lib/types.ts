@@ -45,11 +45,10 @@ export type ThemeKey = 'system' | 'light' | 'dark';
 export type TextSizeKey = 'small' | 'medium' | 'large';
 export type LayoutKey = 'grid' | 'list';
 
-export interface TaskEntry {
-  noteId: string;
-  index: number;
+export interface TaskItem {
+  id: string;
   text: string;
   done: boolean;
-  noteTitle: string;
-  noteUpdatedAt: number;
+  createdAt: number;
+  updatedAt: number;
 }

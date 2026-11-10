@@ -7,7 +7,6 @@
   import { notesStore } from '../notes.svelte';
   import { confirmStore } from '../confirm.svelte';
   import { toast } from '../toast.svelte';
-  import { taskLineHtml } from '../tasks';
   import { tick } from 'svelte';
   import type { Note } from '../types';
 
@@ -31,12 +30,11 @@
 
   let composerOpen = $state(false);
   let composerText = $state('');
-  let composerNoteId = $state<string | null>(null);
   let composerInput = $state<HTMLTextAreaElement | null>(null);
 
   const notes = $derived(notesStore.search(query));
   const columns = $derived(splitColumns(notes));
-  const tasks = $derived(notesStore.tasks);
+  const tasks = $derived(notesStore.allTasks);
   const completedCount = $derived(tasks.filter((t) => t.done).length);
   const selectedCount = $derived(selectedIds.length);
 
@@ -109,7 +107,6 @@
 
   async function openComposer() {
     composerOpen = true;
-    composerNoteId = null;
     composerText = '';
     await tick();
     composerInput?.focus();
@@ -118,13 +115,7 @@
   function commitComposer(): boolean {
     const text = composerText.trim();
     if (!text) return false;
-    if (!composerNoteId) {
-      const note = notesStore.create(taskLineHtml(text));
-      composerNoteId = note.id;
-    } else {
-      const note = notesStore.notes.find((n) => n.id === composerNoteId);
-      if (note) void notesStore.update(note.id, { html: note.html + taskLineHtml(text) });
-    }
+    notesStore.addTask(text);
     composerText = '';
     composerInput?.focus();
     return true;
@@ -134,7 +125,6 @@
     commitComposer();
     composerOpen = false;
     composerText = '';
-    composerNoteId = null;
   }
 
   function autosize(node: HTMLTextAreaElement) {
@@ -253,13 +243,13 @@
     {:else}
       {#if tasks.length}
         <div class="tasks">
-          {#each tasks.filter((t) => !t.done) as task (`${task.noteId}:${task.index}`)}
+          {#each tasks.filter((t) => !t.done) as task (task.id)}
             <TaskCard {task} />
           {/each}
 
           {#if completedCount}
             {#if showCompleted}
-              {#each tasks.filter((t) => t.done) as task (`${task.noteId}:${task.index}`)}
+              {#each tasks.filter((t) => t.done) as task (task.id)}
                 <TaskCard {task} />
               {/each}
             {/if}
@@ -276,7 +266,7 @@
             <Icon name="check-square" size={40} stroke={1.5} />
           </div>
           <p class="empty-title">Aucune tâche</p>
-          <p class="empty-sub">Ajoutez des cases à cocher dans une note pour les retrouver ici</p>
+          <p class="empty-sub">Appuyez sur + pour ajouter une tâche. Les tâches et les notes sont séparées.</p>
         </div>
       {/if}
     {/if}

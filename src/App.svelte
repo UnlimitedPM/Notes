@@ -8,7 +8,6 @@
   import Toast from './lib/components/Toast.svelte';
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import { notesStore } from './lib/notes.svelte';
-  import { taskLineHtml } from './lib/tasks';
 
   type Screen = 'home' | 'note' | 'settings' | 'trash' | 'folders';
 
@@ -59,7 +58,7 @@
   }
 
   function createNote() {
-    const note = notesStore.create(homeTab === 'tasks' ? taskLineHtml() : '');
+    const note = notesStore.create();
     openNote(note.id);
   }
 

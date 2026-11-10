@@ -4,13 +4,13 @@ import type {
   Note,
   NoteColorKey,
   SortKey,
-  TaskEntry,
+  TaskItem,
   TextSizeKey,
   ThemeKey
 } from './types';
 import { deleteAllNotes, deleteNote, loadAllNotes, saveNote, saveNotes } from './db';
 import { plainText } from './format';
-import { parseTasks, setTaskTextAt, taskLineHtml, toggleTaskAt } from './tasks';
+import { parseTasks, taskLineHtml } from './tasks';
 
 export function uid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -59,6 +59,29 @@ function readFolders(): Folder[] {
   }
 }
 
+function readTasks(): TaskItem[] {
+  try {
+    const raw = localStorage.getItem('notes:tasks');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (t): t is TaskItem =>
+          !!t && typeof t === 'object' && typeof (t as TaskItem).id === 'string'
+      )
+      .map((t) => ({
+        id: t.id,
+        text: String(t.text ?? ''),
+        done: !!t.done,
+        createdAt: Number(t.createdAt ?? Date.now()),
+        updatedAt: Number(t.updatedAt ?? Date.now())
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function normalize(value: string): string {
   return value
     .toLowerCase()
@@ -70,60 +93,66 @@ function compact(value: string): string {
   return normalize(value).replace(/[^a-z0-9]+/g, '');
 }
 
-function seedNotes(): Note[] {
-  const now = Date.now();
+function seedTasks(now = Date.now()): TaskItem[] {
   const min = 60_000;
-  const base = {
-    kind: 'text' as const,
+  const make = (text: string, done: boolean, ageMin: number): TaskItem => ({
+    id: uid(),
+    text,
+    done,
+    createdAt: now - ageMin * min,
+    updatedAt: now - ageMin * min
+  });
+  return [
+    make('Bienvenue dans Tâches !', false, 40),
+    make('Appuyez sur une tâche pour modifier son texte.', false, 39),
+    make('Cochez la case pour marquer une tâche terminée.', false, 38),
+    make('Le bouton + ajoute une tâche depuis cet onglet.', false, 37),
+    make('Liste de courses : lait', false, 30),
+    make('Pain complet', false, 29),
+    make('Tomates', false, 28),
+    make('Café', true, 27)
+  ];
+}
+
+function baseNote(now: number): Omit<Note, 'id' | 'title' | 'html' | 'createdAt' | 'updatedAt'> {
+  return {
+    kind: 'text',
+    items: [],
     color: 'default' as NoteColorKey,
     pinned: false,
     folderId: null,
     hidden: false,
-    tags: []
+    tags: [],
+    deletedAt: null
   };
+}
+
+function seedNotes(): Note[] {
+  const now = Date.now();
+  const min = 60_000;
 
   const welcome: Note = {
-    ...base,
+    ...baseNote(now),
     id: uid(),
     title: 'Bienvenue dans Notes',
     createdAt: now - 3 * min,
     updatedAt: now - 3 * min,
-    deletedAt: null,
-    items: [],
     html:
       '<div>Un carnet rapide, noir et léger, qui fonctionne hors ligne sur Android et iPhone.</div>' +
       '<div><br></div>' +
       '<div>• Appuyez sur + pour créer une note</div>' +
       '<div>• Touchez une note pour la lire, touchez le texte pour l’éditer</div>' +
       '<div>• Maintenez une carte pour sélectionner, épingler ou supprimer</div>' +
-      '<div>• Le bouton case transforme la ligne courante en case à cocher : on peut mélanger texte et tâches</div>' +
-      '<div>• Les cases cochées se retrouvent dans l’onglet Tâches</div>'
-  };
-
-  const tasks: Note = {
-    ...base,
-    id: uid(),
-    title: 'À faire',
-    createdAt: now - 40 * min,
-    updatedAt: now - 40 * min,
-    deletedAt: null,
-    items: [],
-    html: [
-      taskLineHtml('Bienvenue dans Tâches !'),
-      taskLineHtml('Appuyez sur une tâche pour modifier son texte.'),
-      taskLineHtml('Cochez la case pour marquer une tâche terminée.'),
-      taskLineHtml('Le bouton + crée une nouvelle note.')
-    ].join('')
+      '<div>• Le bouton case transforme une ligne en case à cocher, dans la note</div>' +
+      '<div>• L’onglet Tâches est une liste séparée : notes et tâches ne se mélangent pas</div>'
   };
 
   const ideas: Note = {
-    ...base,
+    ...baseNote(now),
     id: uid(),
     title: 'Idées',
     createdAt: now - 26 * 60 * min,
     updatedAt: now - 26 * 60 * min,
-    deletedAt: null,
-    items: [],
     html:
       '<div>— Thème AMOLED fidèle à MIUI</div>' +
       '<div>— Synchro auto-hébergée plus tard</div>' +
@@ -131,38 +160,33 @@ function seedNotes(): Note[] {
       '<div>— Notes vocales et dessin</div>'
   };
 
-  const shopping: Note = {
-    ...base,
-    id: uid(),
-    title: 'Liste de courses',
-    createdAt: now - 9 * 24 * 60 * min,
-    updatedAt: now - 9 * 24 * 60 * min,
-    deletedAt: null,
-    items: [],
-    html: [
-      taskLineHtml('Lait'),
-      taskLineHtml('Pain complet'),
-      taskLineHtml('Café', true),
-      taskLineHtml('Tomates')
-    ].join('')
-  };
-
   const wifi: Note = {
-    ...base,
+    ...baseNote(now),
     id: uid(),
     title: 'Wi-Fi maison',
     createdAt: now - 31 * 24 * 60 * min,
     updatedAt: now - 31 * 24 * 60 * min,
-    deletedAt: null,
-    items: [],
     html: '<div>Réseau : Maison</div><div>Mot de passe : à garder ici</div>'
   };
 
-  return [welcome, tasks, ideas, shopping, wifi];
+  return [welcome, ideas, wifi];
+}
+
+/** Une note qui ne contient que des lignes de cases n'est pas une note : ce sont des tâches. */
+function isTaskOnlyNote(html: string): boolean {
+  if (!html || !html.includes('task-line')) return false;
+  if (/<img/i.test(html)) return false;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const lines = Array.from(doc.querySelectorAll('.task-line'));
+  if (lines.length === 0) return false;
+  for (const line of lines) line.remove();
+  const rest = (doc.body.textContent ?? '').replace(/\u00a0/g, ' ').trim();
+  return rest.length === 0;
 }
 
 class NotesStore {
   notes = $state<Note[]>([]);
+  taskList = $state<TaskItem[]>(readTasks());
   ready = $state(false);
   folders = $state<Folder[]>(readFolders());
   /** 'all' | 'none' (sans catégorie) | id de dossier */
@@ -221,23 +245,13 @@ class NotesStore {
     ];
   }
 
-  /** Toutes les cases à cocher de toutes les notes, non terminées d'abord. */
-  get tasks(): TaskEntry[] {
-    const out: TaskEntry[] = [];
-    for (const note of this.sorted) {
-      for (const task of parseTasks(note.html)) {
-        if (!task.text) continue;
-        out.push({
-          noteId: note.id,
-          index: task.index,
-          text: task.text,
-          done: task.done,
-          noteTitle: note.title,
-          noteUpdatedAt: note.updatedAt
-        });
-      }
-    }
-    return [...out.filter((t) => !t.done), ...out.filter((t) => t.done)];
+  /** Onglet Tâches : uniquement les tâches, jamais les notes. */
+  get allTasks(): TaskItem[] {
+    const byDate = (a: TaskItem, b: TaskItem) => b.updatedAt - a.updatedAt;
+    return [
+      ...this.taskList.filter((t) => !t.done).sort(byDate),
+      ...this.taskList.filter((t) => t.done).sort(byDate)
+    ];
   }
 
   private comparator(sort: SortKey) {
@@ -275,37 +289,59 @@ class NotesStore {
       } catch {
         /* ignore */
       }
-      if (notes.length === 0 && !seeded) {
+      if (notes.length === 0 && this.taskList.length === 0 && !seeded) {
         notes = seedNotes();
+        this.taskList = seedTasks();
+        this.persistTasks();
         seeded = true;
         write('notes:seed', '1');
         await saveNotes(notes);
       }
 
-      // Migration : anciennes listes (kind + items) → lignes de cases dans le texte.
-      let migrated = false;
-      const normalized = notes.map((n) => {
-        let html = n.html ?? '';
-        if (n.kind === 'checklist' && (n.items?.length ?? 0) > 0) {
-          html = n.items.map((item) => taskLineHtml(item.text, item.done)).join('');
-          migrated = true;
+      // Migration : anciennes listes (kind + items) et notes composées uniquement de cases
+      // deviennent des tâches autonomes ; les notes restantes sont nettoyées.
+      const extracted: TaskItem[] = [];
+      const kept: Note[] = [];
+
+      for (const note of notes) {
+        let html = note.html ?? '';
+        if (note.kind === 'checklist' && (note.items?.length ?? 0) > 0) {
+          html = note.items.map((item) => taskLineHtml(item.text, item.done)).join('');
         }
-        const next: Note = {
-          ...n,
+
+        if (isTaskOnlyNote(html)) {
+          for (const task of parseTasks(html)) {
+            if (!task.text) continue;
+            extracted.push({
+              id: uid(),
+              text: task.text,
+              done: task.done,
+              createdAt: note.createdAt,
+              updatedAt: note.updatedAt
+            });
+          }
+          await deleteNote(note.id);
+          continue;
+        }
+
+        kept.push({
+          ...note,
           kind: 'text',
           items: [],
           html,
-          folderId: n.folderId ?? null,
-          hidden: n.hidden ?? false
-        };
-        if (n.kind !== 'text' || n.hidden === undefined || n.folderId === undefined) {
-          migrated = true;
-        }
-        return next;
-      });
+          folderId: note.folderId ?? null,
+          hidden: note.hidden ?? false
+        });
+      }
 
-      this.notes = normalized;
-      if (migrated) await saveNotes(normalized);
+      this.notes = kept;
+      if (extracted.length) {
+        this.taskList = [...this.taskList, ...extracted];
+        this.persistTasks();
+      }
+      if (extracted.length || kept.some((n, i) => n !== notes[i])) {
+        await saveNotes(kept);
+      }
     } catch (error) {
       console.error('Chargement des notes impossible', error);
     } finally {
@@ -314,6 +350,10 @@ class NotesStore {
       this.applyPrefs();
       this.watchSystemTheme();
     }
+  }
+
+  private persistTasks(): void {
+    write('notes:tasks', JSON.stringify(this.taskList));
   }
 
   create(initialHtml = '', patch: Partial<Note> = {}): Note {
@@ -369,6 +409,35 @@ class NotesStore {
     return copy;
   }
 
+  addTask(text: string): TaskItem | null {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    const now = Date.now();
+    const task: TaskItem = { id: uid(), text: trimmed, done: false, createdAt: now, updatedAt: now };
+    this.taskList = [task, ...this.taskList];
+    this.persistTasks();
+    return task;
+  }
+
+  toggleTask(id: string): void {
+    this.taskList = this.taskList.map((t) =>
+      t.id === id ? { ...t, done: !t.done, updatedAt: Date.now() } : t
+    );
+    this.persistTasks();
+  }
+
+  setTaskText(id: string, text: string): void {
+    this.taskList = this.taskList.map((t) =>
+      t.id === id ? { ...t, text, updatedAt: Date.now() } : t
+    );
+    this.persistTasks();
+  }
+
+  deleteTask(id: string): void {
+    this.taskList = this.taskList.filter((t) => t.id !== id);
+    this.persistTasks();
+  }
+
   setColor(id: string, color: NoteColorKey): void {
     void this.update(id, { color });
   }
@@ -376,18 +445,6 @@ class NotesStore {
   togglePin(id: string): void {
     const note = this.notes.find((n) => n.id === id);
     if (note) void this.update(id, { pinned: !note.pinned });
-  }
-
-  toggleTask(noteId: string, index: number): void {
-    const note = this.notes.find((n) => n.id === noteId);
-    if (!note) return;
-    void this.update(noteId, { html: toggleTaskAt(note.html, index) });
-  }
-
-  setTaskText(noteId: string, index: number, text: string): void {
-    const note = this.notes.find((n) => n.id === noteId);
-    if (!note) return;
-    void this.update(noteId, { html: setTaskTextAt(note.html, index, text) });
   }
 
   pinMany(ids: string[]): void {
@@ -428,6 +485,8 @@ class NotesStore {
 
   async purgeEverything(): Promise<void> {
     this.notes = [];
+    this.taskList = [];
+    this.persistTasks();
     this.started = false;
     await deleteAllNotes();
   }
