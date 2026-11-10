@@ -72,7 +72,13 @@
   }
 
   function initBody(node: HTMLDivElement) {
-    node.innerHTML = html;
+    node.innerHTML = normalizeHighlight(html);
+  }
+
+  /** Les surlignages enregistrés avec l'ancienne couleur sombre prennent la couleur actuelle. */
+  function normalizeHighlight(source: string): string {
+    const target = highlightColor();
+    return source.split('rgb(77, 63, 18)').join(target).split('#4D3F12').join(target);
   }
 
   function onTitleInput() {
