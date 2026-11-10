@@ -14,8 +14,6 @@ export type MediaEntry = { kind: 'img' | 'audio'; n: number };
 
 /**
  * Liste les médias d'une note, numérotés par type (« Image 1 », « Note vocale 1 »…).
- * Sert à la feuille « Plus d'options » : un appui sur la pastille posée sur un
- * lecteur audio n'est pas fiable, le lecteur natif avale le clic.
  */
 export function listMedia(root: ParentNode | null): MediaEntry[] {
   if (!root) return [];
@@ -31,7 +29,7 @@ export function listMedia(root: ParentNode | null): MediaEntry[] {
   });
 }
 
-/** Supprime le n-ième média (même ordre que `listMedia`) et renvoie l'élément retiré. */
+/** Supprime le n-ième média et renvoie l'élément retiré. */
 export function removeMediaAt(root: ParentNode | null, index: number): Element | null {
   if (!root) return null;
   const media = Array.from(root.querySelectorAll('img, audio'))[index] ?? null;

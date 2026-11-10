@@ -8,7 +8,7 @@
   import { NOTE_COLORS } from '../colors';
   import { formatNoteDate, htmlToText } from '../format';
   import { noteToMarkdown } from '../markdown';
-  import { listMedia, removeMediaAt as removeMediaElementAt } from '../media';
+  import { removeMediaAt as removeMediaElementAt } from '../media';
   import {
     imageFilename,
     markdownFilename,
@@ -19,7 +19,7 @@
   import { ensureNotificationPermission } from '../reminders';
   import type { Note, NoteColorKey } from '../types';
 
-  type SheetName = 'more' | 'color' | 'folder' | 'share' | 'remind' | null;
+  type SheetName = 'more' | 'color' | 'folder' | 'share' | 'remind' | 'imgdesc' | null;
 
   interface Props {
     note: Note;
@@ -781,74 +781,272 @@
     }
   }
 
-  // ---- Suppression d'un média (image / audio) -----------------------------
-  // Une poubelle est posée sur chaque image / audio tant qu'on édite : pas besoin
-  // de « sélectionner » le média (un appui sur le lecteur audio ne remonte pas).
-  let mediaChips = $state<{ index: number; top: number; left: number }[]>([]);
-  let docHost = $state<HTMLElement | null>(null);
+  // ---- Média sélectionné : barre d'actions posée sur l'image / la note vocale --
+  // Comme dans MIUI : un appui sur le média le sélectionne (liseré ambre) et fait
+  // apparaître une barre d'actions (description, plein écran, enregistrer, supprimer).
+  // L'appui est capté sur le document en phase de capture : c'est le seul moyen
+  // d'attraper un appui sur les contrôles natifs d'un <audio>.
+  let mediaMenu = $state<{ index: number; kind: 'img' | 'audio'; top: number; left: number } | null>(
+    null
+  );
 
-  function refreshMediaChips() {
-    if (!editing || !bodyEl) {
-      mediaChips = [];
+  function mediaNodes(): HTMLElement[] {
+    if (!bodyEl) return [];
+    return Array.from(bodyEl.querySelectorAll('img, audio')) as HTMLElement[];
+  }
+
+  function audioNodes(): HTMLAudioElement[] {
+    if (!bodyEl) return [];
+    return Array.from(bodyEl.querySelectorAll('audio')) as HTMLAudioElement[];
+  }
+
+  // Le lecteur natif d'un <audio> avale tous les appuis (contrôles dans un shadow
+  // DOM) : on masque donc le lecteur natif (il reste la source du son) et on pose
+  // notre propre pastille, comme dans MIUI.
+  const audioBound = new WeakSet<HTMLAudioElement>();
+  let audioTick = $state(0);
+
+  type PillState = {
+    i: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    visible: boolean;
+    playing: boolean;
+    current: string;
+    duration: string;
+    ratio: number;
+  };
+
+  let pills = $state<PillState[]>([]);
+  const WAVE = [7, 13, 19, 11, 22, 16, 9, 18, 24, 13, 8, 17, 21, 12, 19, 10, 15, 22, 9, 14];
+
+  function clock(seconds: number): string {
+    if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function bindAudio(el: HTMLAudioElement) {
+    if (audioBound.has(el)) return;
+    audioBound.add(el);
+    const bump = () => {
+      audioTick += 1;
+    };
+    el.addEventListener('play', bump);
+    el.addEventListener('pause', bump);
+    el.addEventListener('ended', bump);
+    el.addEventListener('timeupdate', bump);
+    el.addEventListener('loadedmetadata', bump);
+  }
+
+  function playerHost(): HTMLElement | null {
+    return (bodyEl?.offsetParent as HTMLElement | null) ?? bodyEl;
+  }
+
+  function refreshPills() {
+    void audioTick;
+    const audios = audioNodes();
+    if (!audios.length || !bodyEl) {
+      pills = [];
       return;
     }
-    // offsetTop/offsetLeft sont indépendants du défilement : les pastilles restent
-    // collées au média quand la note défile.
-    mediaChips = Array.from(bodyEl.querySelectorAll('img, audio')).map((el, index) => {
-      const node = el as HTMLElement;
-      const top = node.offsetTop;
-      const right = node.offsetLeft + node.offsetWidth;
+    const host = playerHost();
+    const view = host?.getBoundingClientRect() ?? null;
+    pills = audios.map((el, i) => {
+      bindAudio(el);
+      const duration = Number.isFinite(el.duration) ? el.duration : 0;
+      const current = Number.isFinite(el.currentTime) ? el.currentTime : 0;
+      const rect = el.getBoundingClientRect();
+      const visible =
+        !!view && rect.bottom > view.top + 4 && rect.top < view.bottom - 4 && rect.height > 0;
       return {
-        index,
-        top: Math.max(2, top - 8),
-        left: Math.max(2, right - 26)
+        i,
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height) || 42,
+        visible,
+        playing: !el.paused && !el.ended,
+        current: clock(current),
+        duration: clock(duration),
+        ratio: duration > 0 ? Math.min(1, current / duration) : 0
       };
     });
   }
 
-  function removeMediaAt(index: number) {
-    if (!removeMediaElementAt(bodyEl, index)) return;
-    onBodyInput();
-    refreshMediaChips();
-    refreshMediaItems();
-    toast.show('Média supprimé');
+  function toggleAudio(index: number) {
+    const el = audioNodes()[index];
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
   }
 
-  // ---- Liste des médias de la note (feuille « Plus d'options ») -------------
-  // Une pastille posée sur un lecteur audio n'est pas fiable (le lecteur natif
-  // avale le clic) : la suppression passe aussi par cette liste.
-  let mediaItems = $state<{ kind: 'img' | 'audio'; n: number }[]>([]);
-
-  function openMore() {
-    refreshMediaItems();
-    sheet = 'more';
+  function selectAudio(index: number) {
+    const el = audioNodes()[index];
+    if (el) selectMedia(el);
   }
 
-  function refreshMediaItems() {
-    mediaItems = listMedia(bodyEl);
+  function audioIsSelected(index: number): boolean {
+    if (!mediaMenu || mediaMenu.kind !== 'audio') return false;
+    const audio = audioNodes()[index];
+    return !!audio && mediaNodes()[mediaMenu.index] === audio;
+  }
+
+  function placeMediaMenu(index: number) {
+    const el = mediaNodes()[index];
+    if (!el) {
+      mediaMenu = null;
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const count = el.tagName === 'AUDIO' ? 2 : 4;
+    const width = count * 40 + 16;
+    const maxLeft = Math.max(8, window.innerWidth - width - 8);
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - width / 2), maxLeft);
+    // au milieu du média s'il est assez haut (comme MIUI sur une image), sinon dessous ;
+    // et toujours dans la zone visible.
+    const maxTop = Math.max(8, window.innerHeight - 68);
+    let top = rect.height >= 120 ? rect.top + rect.height / 2 - 26 : rect.bottom + 10;
+    if (top > maxTop) top = Math.max(8, rect.top - 62);
+    top = Math.min(top, maxTop);
+    mediaMenu = { index, kind: el.tagName === 'AUDIO' ? 'audio' : 'img', top, left };
+  }
+
+  function selectMedia(el: HTMLElement) {
+    const nodes = mediaNodes();
+    const index = nodes.indexOf(el);
+    if (index < 0) return;
+    nodes.forEach((node) => node.classList.remove('media-selected'));
+    el.classList.add('media-selected');
+    placeMediaMenu(index);
+  }
+
+  function clearMedia() {
+    mediaNodes().forEach((node) => node.classList.remove('media-selected'));
+    mediaMenu = null;
+  }
+
+  function selectedMediaElement(): HTMLElement | null {
+    if (!mediaMenu) return null;
+    return mediaNodes()[mediaMenu.index] ?? null;
   }
 
   $effect(() => {
-    // recalculé à chaque édition, changement de contenu ou d'outils
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !bodyEl) return;
+      if (target.closest('.media-menu')) return;
+      const media = target.closest('img, audio');
+      if (media && bodyEl.contains(media)) {
+        selectMedia(media as HTMLElement);
+        return;
+      }
+      if (mediaMenu) clearMedia();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  });
+
+  $effect(() => {
+    const current = mediaMenu;
+    if (!current) return;
+    const reposition = () => placeMediaMenu(current.index);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  });
+
+  $effect(() => {
+    // recalculé au changement de contenu, d'édition ou à chaque tick de lecture
     void editing;
     void html;
     void formatOpen;
-    refreshMediaChips();
+    void audioTick;
+    refreshPills();
   });
 
   $effect(() => {
-    const host = docHost;
+    const host = playerHost();
     if (!host) return;
-    // le média bouge quand la note est redimensionnée (rotation, clavier…)
-    const ro = new ResizeObserver(() => refreshMediaChips());
+    const ro = new ResizeObserver(() => refreshPills());
     ro.observe(host);
     if (bodyEl) ro.observe(bodyEl);
-    window.addEventListener('resize', refreshMediaChips);
+    window.addEventListener('resize', refreshPills);
+    window.addEventListener('scroll', refreshPills, true);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', refreshMediaChips);
+      window.removeEventListener('resize', refreshPills);
+      window.removeEventListener('scroll', refreshPills, true);
     };
   });
+
+  function removeSelectedMedia() {
+    if (!mediaMenu) return;
+    if (!removeMediaElementAt(bodyEl, mediaMenu.index)) return;
+    clearMedia();
+    onBodyInput();
+    toast.show('Média supprimé');
+  }
+
+  function saveSelectedMedia() {
+    const el = selectedMediaElement();
+    const src = el?.getAttribute('src');
+    if (!el || !src) return;
+    const audio = el.tagName === 'AUDIO';
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = audio ? 'note-vocale' : 'image';
+    link.click();
+    toast.show(audio ? 'Note vocale enregistrée' : 'Image enregistrée');
+  }
+
+  async function shareSelectedMedia() {
+    const el = selectedMediaElement();
+    const src = el?.getAttribute('src');
+    if (!src) return;
+    try {
+      const blob = await (await fetch(src)).blob();
+      const ext = blob.type.includes('mpeg') ? 'mp3' : 'webm';
+      const file = new File([blob], `note-vocale.${ext}`, { type: blob.type });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return;
+      }
+    } catch {
+      // partage indisponible ou refusé : on enregistre le fichier
+    }
+    saveSelectedMedia();
+  }
+
+  let fullscreenMedia = $state<string | null>(null);
+
+  function openMediaFullscreen() {
+    const src = selectedMediaElement()?.getAttribute('src');
+    if (src) fullscreenMedia = src;
+  }
+
+  let imageAlt = $state('');
+
+  function editImageDescription() {
+    imageAlt = selectedMediaElement()?.getAttribute('alt') ?? '';
+    sheet = 'imgdesc';
+  }
+
+  function applyImageDescription() {
+    const el = selectedMediaElement();
+    if (el) {
+      if (imageAlt.trim()) el.setAttribute('alt', imageAlt.trim());
+      else el.removeAttribute('alt');
+      onBodyInput();
+    }
+    sheet = null;
+  }
 
   function pickImage() {
     fileEl?.click();
@@ -1095,13 +1293,13 @@
         <button class="icon-btn" onclick={() => (sheet = 'color')} aria-label="Style de la note">
           <Icon name="tshirt" size={22} />
         </button>
-        <button class="icon-btn" onclick={openMore} aria-label="Plus d'options">
+        <button class="icon-btn" onclick={() => (sheet = 'more')} aria-label="Plus d'options">
           <Icon name="more" size={22} />
         </button>      </div>
     {/if}
   </header>
 
-  <div class="doc" bind:this={docHost}>
+  <div class="doc">
     <input
       bind:this={titleEl}
       bind:value={title}
@@ -1140,21 +1338,6 @@
       onkeydown={onBodyKeydown}
       onclick={onBodyClick}
     ></div>
-
-    {#if editing}
-      {#each mediaChips as chip (chip.index)}
-        <button
-          class="media-del"
-          style="top:{chip.top}px;left:{chip.left}px"
-          onpointerdown={(event) => event.preventDefault()}
-          onclick={() => removeMediaAt(chip.index)}
-          title="Supprimer le média"
-          aria-label="Supprimer le média"
-        >
-          <Icon name="trash" size={14} />
-        </button>
-      {/each}
-    {/if}
   </div>
 
   {#if editing}
@@ -1252,6 +1435,64 @@
 
 <!-- Feuilles et plein-écran : hors de `.note`, sinon ils héritent de la palette
      de la note (texte foncé sur une feuille sombre). -->
+{#each pills as pill (pill.i)}
+  {#if pill.visible}
+    <div
+      class="voice-pill"
+      class:selected={audioIsSelected(pill.i)}
+      style="top:{pill.top}px;left:{pill.left}px;width:{pill.width}px;height:{pill.height}px"
+    >
+      <button
+        class="vp-play"
+        onclick={() => toggleAudio(pill.i)}
+        aria-label={pill.playing ? 'Mettre en pause' : 'Lire la note vocale'}
+      >
+        <Icon name={pill.playing ? 'pause' : 'play'} size={15} />
+      </button>
+      <button class="vp-body" onclick={() => selectAudio(pill.i)} aria-label="Note vocale">
+        <span class="vp-wave">
+          {#each WAVE as h, k}
+            <i style="height:{h}px" class:on={k / WAVE.length <= pill.ratio}></i>
+          {/each}
+        </span>
+        <span class="vp-time">{pill.playing || pill.ratio > 0 ? pill.current : pill.duration}</span>
+      </button>
+    </div>
+  {/if}
+{/each}
+
+{#if mediaMenu}
+  <div class="media-menu" style="top:{mediaMenu.top}px;left:{mediaMenu.left}px">
+    {#if mediaMenu.kind === 'img'}
+      <button class="mm-btn" onclick={editImageDescription} aria-label="Description de l'image">
+        <Icon name="comment" size={21} />
+      </button>
+      <button class="mm-btn" onclick={openMediaFullscreen} aria-label="Afficher en plein écran">
+        <Icon name="expand" size={21} />
+      </button>
+      <button class="mm-btn" onclick={saveSelectedMedia} aria-label="Enregistrer l'image">
+        <Icon name="download" size={21} />
+      </button>
+    {:else}
+      <button class="mm-btn" onclick={shareSelectedMedia} aria-label="Partager la note vocale">
+        <Icon name="share" size={21} />
+      </button>
+      <button class="mm-btn" onclick={saveSelectedMedia} aria-label="Enregistrer la note vocale">
+        <Icon name="download" size={21} />
+      </button>
+    {/if}
+    <button class="mm-btn" onclick={removeSelectedMedia} aria-label="Supprimer le média">
+      <Icon name="trash" size={21} />
+    </button>
+  </div>
+{/if}
+
+{#if fullscreenMedia}
+  <div class="media-full" role="presentation" onclick={() => (fullscreenMedia = null)}>
+    <img src={fullscreenMedia} alt="" />
+  </div>
+{/if}
+
 <Sheet
     open={sheet !== null}
     onclose={() => (sheet = null)}
@@ -1263,7 +1504,9 @@
           ? 'Partager une note'
           : sheet === 'remind'
             ? 'Rappel'
-            : ''}
+            : sheet === 'imgdesc'
+              ? "Description de l'image"
+              : ''}
   >
     {#if sheet === 'share'}
       <button class="sheet-row" onclick={shareAsText}>
@@ -1299,16 +1542,6 @@
         <Icon name="copy" size={22} />
         <span class="grow">Dupliquer</span>
       </button>
-      {#if mediaItems.length}
-        {#each mediaItems as item, index (item.kind + index)}
-          <button class="sheet-row" onclick={() => removeMediaAt(index)}>
-            <Icon name={item.kind === 'audio' ? 'waveform' : 'image'} size={22} />
-            <span class="grow">
-              {item.kind === 'audio' ? `Supprimer la note vocale ${item.n}` : `Supprimer l'image ${item.n}`}
-            </span>
-          </button>
-        {/each}
-      {/if}
       <button class="sheet-row danger" onclick={removeNote}>
         <Icon name="trash" size={22} />
         <span class="grow">Supprimer</span>
@@ -1359,6 +1592,20 @@
         </button>
       {/if}
       <p class="remind-note">Le rappel s'affiche tant que l'app est ouverte ; les rappels système viendront avec la synchronisation.</p>
+      <button class="sheet-cancel" onclick={() => (sheet = null)}>Annuler</button>
+    {:else if sheet === 'imgdesc'}
+      <div class="alt-field">
+        <input
+          type="text"
+          bind:value={imageAlt}
+          placeholder="Description de l'image"
+          aria-label="Description de l'image"
+        />
+      </div>
+      <button class="sheet-row" onclick={applyImageDescription}>
+        <Icon name="check" size={22} />
+        <span class="grow">Enregistrer la description</span>
+      </button>
       <button class="sheet-cancel" onclick={() => (sheet = null)}>Annuler</button>
     {/if}
   </Sheet>
@@ -1466,20 +1713,136 @@
     display: block;
     width: 100%;
     margin: 12px 0;
+    /* le lecteur natif reste la source du son mais n'est ni peint ni cliquable :
+       ses contrôles internes avalent tous les appuis. La pastille ci-dessous le
+       remplace visuellement. */
+    visibility: hidden;
   }
 
-  .media-del {
-    position: absolute;
-    z-index: 5;
-    width: 26px;
-    height: 26px;
+  .voice-pill {
+    position: fixed;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px 0 10px;
+    border-radius: 22px;
+    background: var(--surface-3, #2a2a2d);
+    box-sizing: border-box;
+  }
+
+  .voice-pill.selected {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .vp-play {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
     display: grid;
     place-items: center;
     border-radius: 50%;
-    background: var(--danger);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-    border: 1.5px solid rgba(255, 255, 255, 0.75);
+    background: var(--accent);
+    color: #1a1200;
+  }
+
+  .vp-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .vp-wave {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 26px;
+    overflow: hidden;
+  }
+
+  .vp-wave i {
+    flex: 1 1 0;
+    min-width: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  .vp-wave i.on {
+    background: var(--accent);
+  }
+
+  .vp-time {
+    flex: 0 0 auto;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .note-body :global(img.media-selected),
+  .note-body :global(audio.media-selected) {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 14px;
+  }
+
+  .media-menu {
+    position: fixed;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 5px 6px;
+    border-radius: 24px;
+    background: rgba(30, 30, 32, 0.97);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  .mm-btn {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #f2f2f4;
+  }
+
+  .mm-btn:active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .media-full {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.94);
+  }
+
+  .media-full img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  .alt-field {
+    padding: 4px 16px 12px;
+  }
+
+  .alt-field input {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 16px;
   }
 
   .note-body :global(h1) {

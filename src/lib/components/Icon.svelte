@@ -61,7 +61,14 @@ const ICONS: Record<string, string> = {
   moon: '<path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.6v2M12 19.4v2M4.1 4.1l1.5 1.5M18.4 18.4l1.5 1.5M2.6 12h2M19.4 12h2M4.1 19.9l1.5-1.5M18.4 5.6l1.5-1.5"/>',
   monitor:
-    '<rect x="3.4" y="4.6" width="17.2" height="12" rx="2"/><path d="M9 20h6M12 16.6V20"/>'
+    '<rect x="3.4" y="4.6" width="17.2" height="12" rx="2"/><path d="M9 20h6M12 16.6V20"/>',
+  comment:
+    '<path d="M4.6 5.4h14.8a1.6 1.6 0 0 1 1.6 1.6v8.2a1.6 1.6 0 0 1-1.6 1.6H12l-4.4 3.2v-3.2H4.6A1.6 1.6 0 0 1 3 15.2V7a1.6 1.6 0 0 1 1.6-1.6Z"/><path d="M7 9.4h10M7 12.8h6.4"/>',
+  expand:
+    '<path d="M9.4 4.6H4.6v4.8M14.6 4.6h4.8v4.8M19.4 14.6v4.8h-4.8M4.6 14.6v4.8h4.8"/>',
+  download: '<path d="M12 3.6v11.2"/><path d="M7.6 10.6 12 15l4.4-4.4"/><path d="M4.6 19.4h14.8"/>',
+  play: '<path d="M8 5.4 18.4 12 8 18.6Z" fill="currentColor"/>',
+  pause: '<g fill="currentColor" stroke="none"><rect x="7.4" y="5.6" width="3.4" height="12.8" rx="1.2"/><rect x="13.2" y="5.6" width="3.4" height="12.8" rx="1.2"/></g>'
 };
 
 interface Props {
