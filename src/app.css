@@ -17,6 +17,7 @@
   --danger: #e5484d;
   --scrim: rgba(0, 0, 0, 0.4);
   --shadow-fab: 0 6px 20px rgba(0, 0, 0, 0.25);
+  --bar-bg: #f1f1f3;
   --font: 'MiSans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -36,6 +37,7 @@
   --surface: #1c1c1e;
   --surface-2: #28282b;
   --surface-3: #38383c;
+  --bar-bg: #171717;
   --line: rgba(255, 255, 255, 0.09);
   --text: #ffffff;
   --text-2: #a1a1a6;
@@ -96,36 +98,59 @@
 }
 
 [data-theme='dark'] [data-note-color='default'] {
-  --card-bg: #1e1e1e;
+  --card-bg: #242424;
   --note-bg: #000000;
 }
+
+/* Sur MIUI, une note colorée reste claire même en thème sombre : texte foncé. */
 [data-theme='dark'] [data-note-color='yellow'] {
-  --card-bg: #332b12;
-  --note-bg: #1a1607;
+  --card-bg: #f7efd6;
+  --note-bg: #fdf7e4;
+  --text: #211c0c;
+  --text-2: #5c543c;
+  --text-3: #8b8267;
 }
 [data-theme='dark'] [data-note-color='green'] {
-  --card-bg: #17281a;
-  --note-bg: #0b150d;
+  --card-bg: #e6f1dd;
+  --note-bg: #f0f7ea;
+  --text: #16220f;
+  --text-2: #4e6042;
+  --text-3: #7c8c72;
 }
 [data-theme='dark'] [data-note-color='blue'] {
-  --card-bg: #172437;
-  --note-bg: #0a111c;
+  --card-bg: #e3ecf8;
+  --note-bg: #eef4fc;
+  --text: #101b26;
+  --text-2: #48586a;
+  --text-3: #78879a;
 }
 [data-theme='dark'] [data-note-color='purple'] {
-  --card-bg: #241b36;
-  --note-bg: #120d1c;
+  --card-bg: #ece5f7;
+  --note-bg: #f5f0fd;
+  --text: #1c1428;
+  --text-2: #544a63;
+  --text-3: #837a92;
 }
 [data-theme='dark'] [data-note-color='pink'] {
-  --card-bg: #33202a;
-  --note-bg: #1a0f15;
+  --card-bg: #f8e6ee;
+  --note-bg: #fdf1f6;
+  --text: #261218;
+  --text-2: #63454f;
+  --text-3: #93767f;
 }
 [data-theme='dark'] [data-note-color='orange'] {
-  --card-bg: #33230f;
-  --note-bg: #1a1208;
+  --card-bg: #fbeadb;
+  --note-bg: #fdf3e9;
+  --text: #2a1a0d;
+  --text-2: #6b4f39;
+  --text-3: #9a7f68;
 }
 [data-theme='dark'] [data-note-color='gray'] {
-  --card-bg: #26262a;
-  --note-bg: #141416;
+  --card-bg: #e9e9ec;
+  --note-bg: #f2f2f4;
+  --text: #141416;
+  --text-2: #56565e;
+  --text-3: #86868e;
 }
 
 /* ============================================================

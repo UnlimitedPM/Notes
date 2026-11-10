@@ -452,7 +452,8 @@
   }
 
   function highlightColor(): string {
-    return document.documentElement.dataset.theme === 'light' ? '#FFE58A' : '#4D3F12';
+    // Couleurs relevées sur l'app MIUI du téléphone.
+    return document.documentElement.dataset.theme === 'light' ? '#FFE58A' : '#817962';
   }
 
   type FormatTool = {
@@ -1253,7 +1254,7 @@
     justify-content: space-around;
     gap: 4px;
     padding: 6px 8px calc(8px + var(--safe-bottom));
-    background: var(--surface-2);
+    background: var(--bar-bg, var(--surface-2));
   }
 
   .tool-btn {
@@ -1310,7 +1311,7 @@
     bottom: 0;
     width: 20px;
     pointer-events: none;
-    background: linear-gradient(to right, transparent, var(--surface-2) 75%);
+    background: linear-gradient(to right, transparent, var(--bar-bg, var(--surface-2)) 75%);
     transition: opacity 0.15s ease;
   }
 
