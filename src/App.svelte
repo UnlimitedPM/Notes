@@ -8,6 +8,7 @@
   import Toast from './lib/components/Toast.svelte';
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import { notesStore } from './lib/notes.svelte';
+  import { startReminderWatcher } from './lib/reminders';
 
   type Screen = 'home' | 'note' | 'settings' | 'trash' | 'folders';
 
@@ -36,6 +37,7 @@
 
   onMount(() => {
     void notesStore.init();
+    startReminderWatcher();
 
     const onPop = () => {
       if (screen !== 'home') {
@@ -99,7 +101,7 @@
   {:else if screen === 'trash'}
     <TrashScreen onclose={goHome} />
   {:else if screen === 'folders'}
-    <FoldersScreen onclose={goHome} />
+    <FoldersScreen onclose={goHome} ontrash={openTrash} />
   {:else}
     <HomeScreen
       tab={homeTab}

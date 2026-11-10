@@ -122,6 +122,7 @@ function baseNote(now: number): Omit<Note, 'id' | 'title' | 'html' | 'createdAt'
     pinned: false,
     folderId: null,
     hidden: false,
+    remindAt: null,
     tags: [],
     deletedAt: null
   };
@@ -184,8 +185,59 @@ function isTaskOnlyNote(html: string): boolean {
   return rest.length === 0;
 }
 
-class NotesStore {
-  notes = $state<Note[]>([]);
+const COLOR_KEYS: NoteColorKey[] = [
+  'default',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+  'pink',
+  'orange',
+  'gray'
+];
+
+/** Validation souple d'une note venant d'un fichier JSON. */
+function sanitizeNote(value: unknown): Note | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.id !== 'string' || !raw.id) return null;
+  const now = Date.now();
+  const color = COLOR_KEYS.includes(raw.color as NoteColorKey)
+    ? (raw.color as NoteColorKey)
+    : 'default';
+  return {
+    id: raw.id,
+    kind: 'text',
+    title: typeof raw.title === 'string' ? raw.title : '',
+    html: typeof raw.html === 'string' ? raw.html : '',
+    items: [],
+    color,
+    pinned: !!raw.pinned,
+    folderId: typeof raw.folderId === 'string' ? raw.folderId : null,
+    hidden: !!raw.hidden,
+    remindAt: typeof raw.remindAt === 'number' ? raw.remindAt : null,
+    tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t)) : [],
+    createdAt: Number(raw.createdAt) || now,
+    updatedAt: Number(raw.updatedAt) || now,
+    deletedAt: typeof raw.deletedAt === 'number' ? raw.deletedAt : null
+  };
+}
+
+function sanitizeTask(value: unknown): TaskItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.id !== 'string' || !raw.id) return null;
+  const now = Date.now();
+  return {
+    id: raw.id,
+    text: typeof raw.text === 'string' ? raw.text : '',
+    done: !!raw.done,
+    createdAt: Number(raw.createdAt) || now,
+    updatedAt: Number(raw.updatedAt) || now
+  };
+}
+
+class NotesStore {  notes = $state<Note[]>([]);
   taskList = $state<TaskItem[]>(readTasks());
   ready = $state(false);
   folders = $state<Folder[]>(readFolders());
@@ -338,7 +390,8 @@ class NotesStore {
           items: [],
           html,
           folderId: note.folderId ?? null,
-          hidden: note.hidden ?? false
+          hidden: note.hidden ?? false,
+          remindAt: note.remindAt ?? null
         });
       }
 
@@ -379,6 +432,7 @@ class NotesStore {
           ? this.activeCategory
           : null,
       hidden: false,
+      remindAt: null,
       tags: [],
       createdAt: now,
       updatedAt: now,
@@ -408,6 +462,7 @@ class NotesStore {
       tags: [...note.tags],
       pinned: false,
       hidden: false,
+      remindAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null
@@ -448,6 +503,90 @@ class NotesStore {
 
   setColor(id: string, color: NoteColorKey): void {
     void this.update(id, { color });
+  }
+
+  /** Rappel d'une note (fonctionne app ouverte ; les rappels système viendront avec le serveur). */
+  setReminder(id: string, at: number | null): void {
+    void this.update(id, { remindAt: at });
+  }
+
+  /** Notes dont le rappel est arrivé à échéance. */
+  dueReminders(now = Date.now()): Note[] {
+    return this.notes.filter((n) => !n.deletedAt && n.remindAt !== null && n.remindAt <= now);
+  }
+
+  /** Notes avec un rappel à venir, triées par échéance. */
+  get upcomingReminders(): Note[] {
+    return this.notes
+      .filter((n) => !n.deletedAt && n.remindAt !== null)
+      .sort((a, b) => (a.remindAt ?? 0) - (b.remindAt ?? 0));
+  }
+
+  /**
+   * Restaure un export JSON (notes + dossiers + tâches).
+   * Fusion par identifiant : la version la plus récente gagne, rien n'est supprimé.
+   */
+  async importPayload(raw: unknown): Promise<{ notes: number; folders: number; tasks: number }> {
+    const payload = raw as {
+      notes?: unknown;
+      folders?: unknown;
+      tasks?: unknown;
+    } | null;
+    if (!payload || typeof payload !== 'object') throw new Error('Fichier illisible');
+
+    const importedNotes = Array.isArray(payload.notes) ? payload.notes : [];
+    const importedFolders = Array.isArray(payload.folders) ? payload.folders : [];
+    const importedTasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+
+    let notes = 0;
+    const toSave: Note[] = [];
+    for (const item of importedNotes) {
+      const note = sanitizeNote(item);
+      if (!note) continue;
+      const index = this.notes.findIndex((n) => n.id === note.id);
+      if (index === -1) {
+        this.notes.unshift(note);
+        toSave.push(note);
+        notes += 1;
+      } else if (note.updatedAt >= this.notes[index].updatedAt) {
+        this.notes[index] = note;
+        toSave.push(note);
+        notes += 1;
+      }
+    }
+    // IndexedDB d'abord, sinon un rechargement perdrait les notes importées
+    if (toSave.length) await saveNotes(toSave);
+
+    let folders = 0;
+    for (const item of importedFolders) {
+      const folder = item as Folder | null;
+      if (!folder || typeof folder.id !== 'string') continue;
+      if (this.folders.some((f) => f.id === folder.id)) continue;
+      this.folders = [...this.folders, { id: folder.id, name: String(folder.name ?? 'Dossier') }];
+      folders += 1;
+    }
+    if (folders) write('notes:folders', JSON.stringify(this.folders));
+
+    let tasks = 0;
+    const nextTasks = [...this.taskList];
+    for (const item of importedTasks) {
+      const task = sanitizeTask(item);
+      if (!task) continue;
+      const index = nextTasks.findIndex((t) => t.id === task.id);
+      if (index === -1) {
+        nextTasks.push(task);
+        tasks += 1;
+      } else if (task.updatedAt >= nextTasks[index].updatedAt) {
+        nextTasks[index] = task;
+        tasks += 1;
+      }
+    }
+    if (tasks) {
+      this.taskList = nextTasks;
+      this.persistTasks();
+    }
+
+    return { notes, folders, tasks };
   }
 
   togglePin(id: string): void {

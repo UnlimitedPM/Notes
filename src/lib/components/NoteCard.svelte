@@ -81,7 +81,13 @@
     {#if !image}
       <p class="card-text">{preview || 'Pas de texte'}</p>
     {/if}
-    <span class="card-date">{formatCardDate(note.updatedAt)}</span>
+    <span class="card-date">
+      {#if note.remindAt}
+        <span class="remind"><Icon name="bell" size={13} stroke={2} />{formatCardDate(note.remindAt)}</span>
+        <span class="dot-sep">·</span>
+      {/if}
+      {formatCardDate(note.updatedAt)}
+    </span>
   </span>
   {#if selectable}
     <span class="pick" class:on={selected}>
@@ -163,12 +169,27 @@
   }
 
   .card-date {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-top: auto;
     padding-top: 14px;
     font-size: 13px;
     line-height: 1.2;
     color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .remind {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--accent);
+  }
+
+  .dot-sep {
+    opacity: 0.6;
   }
 
   .pick {

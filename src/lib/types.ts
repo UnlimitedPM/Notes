@@ -28,6 +28,8 @@ export interface Note {
   pinned: boolean;
   folderId: string | null;
   hidden: boolean;
+  /** Horodatage du rappel, null si aucun. */
+  remindAt: number | null;
   tags: string[];
   createdAt: number;
   updatedAt: number;

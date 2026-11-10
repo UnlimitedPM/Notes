@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Sheet from './Sheet.svelte';
+  import DrawingPad from './DrawingPad.svelte';
+  import VoiceRecorder from './VoiceRecorder.svelte';
   import { notesStore } from '../notes.svelte';
   import { NOTE_COLORS } from '../colors';
   import { formatNoteDate, htmlToText } from '../format';
@@ -13,9 +15,10 @@
     shareOrDownload
   } from '../noteImage';
   import { toast } from '../toast.svelte';
+  import { ensureNotificationPermission } from '../reminders';
   import type { Note, NoteColorKey } from '../types';
 
-  type SheetName = 'more' | 'color' | 'folder' | 'share' | null;
+  type SheetName = 'more' | 'color' | 'folder' | 'share' | 'remind' | null;
 
   interface Props {
     note: Note;
@@ -43,6 +46,8 @@
   let highlightPending = $state(false);
   let formatScrollEl = $state<HTMLDivElement | null>(null);
   let formatAtEnd = $state(false);
+  let drawingOpen = $state(false);
+  let voiceOpen = $state(false);
 
   let pending: Partial<Note> = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -778,6 +783,26 @@
     fileEl?.click();
   }
 
+  function insertHtmlAtCaret(html: string) {
+    ensureFocus();
+    document.execCommand('insertHTML', false, html);
+    onBodyInput();
+    editing = true;
+  }
+
+  function onDrawDone(dataUrl: string) {
+    drawingOpen = false;
+    insertHtmlAtCaret(`<img src="${dataUrl}" alt="" />`);
+  }
+
+  function onVoiceDone(dataUrl: string, mime: string) {
+    voiceOpen = false;
+    const type = mime || 'audio/webm';
+    insertHtmlAtCaret(
+      `<audio controls src="${dataUrl}" data-mime="${type}"></audio><div><br></div>`
+    );
+  }
+
   function onFileChange(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -836,6 +861,65 @@
 
   function plainNoteText(): string {
     return `${title}\n\n${htmlToText(html)}`.trim();
+  }
+
+  // ---- Rappel -------------------------------------------------------------
+  let remindValue = $state('');
+
+  function pad(value: number): string {
+    return String(value).padStart(2, '0');
+  }
+
+  function toInputValue(timestamp: number): string {
+    const date = new Date(timestamp);
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+      date.getHours()
+    )}:${pad(date.getMinutes())}`;
+  }
+
+  function reminderLabel(timestamp: number): string {
+    return formatNoteDate(timestamp);
+  }
+
+  async function openReminder() {
+    remindValue = note.remindAt ? toInputValue(note.remindAt) : toInputValue(Date.now() + 60 * 60 * 1000);
+    sheet = 'remind';
+    void ensureNotificationPermission();
+  }
+
+  function setReminderIn(delta: number | null) {
+    notesStore.setReminder(id, delta === null ? null : Date.now() + delta);
+    sheet = null;
+    toast.show(delta === null ? 'Rappel retiré' : 'Rappel programmé');
+  }
+
+  function setReminderAtEvening() {
+    const date = new Date();
+    date.setHours(20, 0, 0, 0);
+    if (date.getTime() <= Date.now()) date.setDate(date.getDate() + 1);
+    notesStore.setReminder(id, date.getTime());
+    sheet = null;
+    toast.show('Rappel programmé');
+  }
+
+  function setReminderTomorrow() {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    date.setHours(8, 0, 0, 0);
+    notesStore.setReminder(id, date.getTime());
+    sheet = null;
+    toast.show('Rappel programmé');
+  }
+
+  function applyReminder() {
+    const time = new Date(remindValue).getTime();
+    if (Number.isNaN(time)) {
+      toast.show('Date invalide');
+      return;
+    }
+    notesStore.setReminder(id, time);
+    sheet = null;
+    toast.show('Rappel programmé');
   }
 
   async function copyText(text: string) {
@@ -1032,7 +1116,7 @@
       {:else}
         <button
           class="tool-btn"
-          onclick={() => toast.show('Notes vocales bientôt disponibles')}
+          onclick={() => (voiceOpen = true)}
           aria-label="Note vocale"
         >
           <Icon name="waveform" size={25} />
@@ -1042,7 +1126,7 @@
         </button>
         <button
           class="tool-btn"
-          onclick={() => toast.show('Dessin bientôt disponible')}
+          onclick={() => (drawingOpen = true)}
           aria-label="Dessiner"
         >
           <Icon name="draw" size={25} />
@@ -1089,7 +1173,9 @@
         ? 'Dossier'
         : sheet === 'share'
           ? 'Partager une note'
-          : ''}
+          : sheet === 'remind'
+            ? 'Rappel'
+            : ''}
   >
     {#if sheet === 'share'}
       <button class="sheet-row" onclick={shareAsText}>
@@ -1106,6 +1192,13 @@
       </button>
       <button class="sheet-cancel" onclick={() => (sheet = null)}>Annuler</button>
     {:else if sheet === 'more'}
+      <button class="sheet-row" onclick={openReminder}>
+        <Icon name="bell" size={22} />
+        <span class="grow">Rappel</span>
+        {#if note.remindAt}
+          <span class="sheet-extra">{reminderLabel(note.remindAt)}</span>
+        {/if}
+      </button>
       <button class="sheet-row" onclick={togglePin}>
         <Icon name={note.pinned ? 'pin-filled' : 'pin'} size={22} />
         <span class="grow">{note.pinned ? 'Désépingler' : 'Épingler'}</span>
@@ -1150,8 +1243,35 @@
           {/if}
         </button>
       {/each}
+    {:else if sheet === 'remind'}
+      <button class="sheet-row" onclick={() => setReminderIn(60 * 60 * 1000)}>
+        <Icon name="bell" size={22} />
+        <span class="grow">Dans 1 heure</span>
+      </button>
+      <button class="sheet-row" onclick={() => setReminderAtEvening()}>Ce soir à 20:00</button>
+      <button class="sheet-row" onclick={() => setReminderTomorrow()}>Demain à 8:00</button>
+      <div class="remind-custom">
+        <input type="datetime-local" bind:value={remindValue} aria-label="Date et heure du rappel" />
+        <button class="remind-apply" onclick={applyReminder} disabled={!remindValue}>OK</button>
+      </div>
+      {#if note.remindAt}
+        <button class="sheet-row danger" onclick={() => setReminderIn(null)}>
+          <Icon name="trash" size={22} />
+          <span class="grow">Retirer le rappel</span>
+        </button>
+      {/if}
+      <p class="remind-note">Le rappel s'affiche tant que l'app est ouverte ; les rappels système viendront avec la synchronisation.</p>
+      <button class="sheet-cancel" onclick={() => (sheet = null)}>Annuler</button>
     {/if}
   </Sheet>
+
+  {#if drawingOpen}
+    <DrawingPad onclose={() => (drawingOpen = false)} ondone={onDrawDone} />
+  {/if}
+
+  {#if voiceOpen}
+    <VoiceRecorder onclose={() => (voiceOpen = false)} ondone={onVoiceDone} />
+  {/if}
 </div>
 
 <style>
@@ -1242,6 +1362,12 @@
     height: auto;
     margin: 14px 0;
     border-radius: 14px;
+  }
+
+  .note-body :global(audio) {
+    display: block;
+    width: 100%;
+    margin: 12px 0;
   }
 
   .note-body :global(h1) {
@@ -1494,6 +1620,54 @@
 
   .swatch-label {
     font-size: 11.5px;
+    color: var(--text-3);
+  }
+
+  .sheet-extra {
+    margin-left: auto;
+    font-size: 14.5px;
+    color: var(--accent);
+  }
+
+  .remind-custom {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .remind-custom input {
+    flex: 1;
+    min-width: 0;
+    height: 46px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 16px;
+    font-family: inherit;
+    color-scheme: inherit;
+  }
+
+  .remind-apply {
+    height: 46px;
+    padding: 0 18px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .remind-apply:disabled {
+    opacity: 0.4;
+  }
+
+  .remind-note {
+    margin: 6px 16px 4px;
+    font-size: 13px;
+    line-height: 1.35;
     color: var(--text-3);
   }
 </style>

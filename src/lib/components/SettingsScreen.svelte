@@ -25,6 +25,7 @@
 
   let sheet = $state<SheetName>(null);
   let scrolled = $state(false);
+  let fileInput = $state<HTMLInputElement | null>(null);
 
   // Version lue dans package.json (source unique de vérité).
   const appVersion = pkg.version;
@@ -60,7 +61,8 @@
       version: 1,
       exportedAt: new Date().toISOString(),
       folders: notesStore.folders,
-      notes: notesStore.notes
+      notes: notesStore.notes,
+      tasks: notesStore.taskList
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -70,6 +72,27 @@
     link.click();
     URL.revokeObjectURL(url);
     toast.show('Export JSON téléchargé');
+  }
+
+  async function importNotes(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const payload = JSON.parse(await file.text()) as unknown;
+      const result = await notesStore.importPayload(payload);
+      const parts = [
+        `${result.notes} note${result.notes > 1 ? 's' : ''}`,
+        `${result.folders} dossier${result.folders > 1 ? 's' : ''}`,
+        `${result.tasks} tâche${result.tasks > 1 ? 's' : ''}`
+      ];
+      toast.show(`Importé : ${parts.join(', ')}`);
+    } catch (error) {
+      console.error('Import impossible', error);
+      toast.show('Fichier JSON invalide');
+    } finally {
+      input.value = '';
+    }
   }
 </script>
 
@@ -178,6 +201,18 @@
       <span class="value">JSON</span>
       <Icon name="chevron-right" size={20} class="chev" />
     </button>
+    <button class="row" onclick={() => fileInput?.click()}>
+      <span class="label">Importer des notes</span>
+      <span class="value">JSON</span>
+      <Icon name="chevron-right" size={20} class="chev" />
+    </button>
+    <input
+      bind:this={fileInput}
+      class="file-input"
+      type="file"
+      accept="application/json,.json"
+      onchange={importNotes}
+    />
     <div class="row plain">
       <span class="label">Version</span>
       <span class="value">{appVersion}</span>
@@ -363,6 +398,10 @@
   :global(.chev) {
     color: var(--text-3);
     flex: 0 0 auto;
+  }
+
+  .file-input {
+    display: none;
   }
 
   .divider {

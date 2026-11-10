@@ -25,9 +25,9 @@
 | Taille du texte | Petite / Moyenne / Grande | identique | ✅ |
 | Tri | date de création / date de modification | + tri par titre | ✅ |
 | Disposition | grille / liste | identique | ✅ |
-| Rappel dans une note | oui (date + heure) | ❌ | 🔨 interne |
-| Croquis / dessin | vrai canevas (note « Dessins ») | toast « bientôt » | 🔨 interne |
-| Note vocale | vrai enregistreur | toast « bientôt » | 🔨 interne + serveur |
+| Rappel dans une note | oui (date + heure) | oui (date + heure, badge) | ✅ local* |
+| Croquis / dessin | vrai canevas (note « Dessins ») | canevas intégré (couleurs, gomme, épaisseur) | ✅ |
+| Note vocale | vrai enregistreur | `MediaRecorder` + lecteur dans la note | ✅ |
 | Placer sur l'écran d'accueil | raccourci système | ❌ | 🌍 externe |
 | Notes rapides (panneau latéral, URL copiées) | natif MIUI | ❌ | 🌍 externe |
 | Xiaomi Cloud | synchro cloud | ❌ | 🌍 externe |
@@ -38,14 +38,18 @@
 
 ---
 
-## 2. Manques sans cause externe (à coder, rien ne bloque)
+## 2. Manques sans cause externe — **faits**
 
-1. **Croquis** : canevas + `PointerEvent`, gomme, couleurs, export PNG stocké comme image.
-2. **Note vocale** : `MediaRecorder`, lecteur intégré, durée, suppression.
-3. **Rappel dans une note** : date + heure, affichage d'un badge, annulation.
-4. **Corbeille depuis l'écran Dossiers** (comme MIUI) au lieu des Réglages seulement.
-5. **Import JSON** : l'export existe, l'import n'existe pas (restauration complète).
-6. **Fusion des doublons de code** : `kind: 'checklist'` (ancien modèle) encore dans les types.
+1. ✅ **Croquis** : canevas (6 couleurs, gomme, 3 épaisseurs), inséré comme image.
+2. ✅ **Note vocale** : `MediaRecorder` + lecteur audio intégré à la note.
+3. ✅ **Rappel dans une note** : 1 h / ce soir / demain / date libre, badge cloche sur la carte ;
+   le rappel se déclenche quand l'app est ouverte (notification si autorisée).
+   \* Les rappels garantis app fermée exigent le push serveur (§3.2).
+4. ✅ **Corbeille depuis l'écran Dossiers** (icône en haut à droite, comme MIUI) ;
+   suppression d'un dossier reste accessible sur chaque ligne.
+5. ✅ **Import JSON** : export et import complets (notes + dossiers + tâches), fusion par id
+   (la version la plus récente gagne, rien n'est supprimé).
+6. ⏳ **Ancien modèle `kind: 'checklist'`** encore présent dans les types (inoffensif).
 
 ---
 
@@ -163,9 +167,9 @@ des sauvegardes du serveur.
 
 ## 5. Ordre conseillé
 
-1. Finir les manques internes (croquis, vocal, rappel, import JSON, corbeille dans Dossiers).
+1. ~~Finir les manques internes~~ → fait (croquis, vocal, rappel, import, corbeille).
 2. Poser le **serveur de synchro** (3.1) : c'est le socle de tout le reste.
-3. Brancher **push + rappels** (3.2).
+3. Brancher **push + rappels** (3.2) — c'est ce qui rendra les rappels fiables app fermée.
 4. Déplacer images/audio vers le stockage de pièces jointes (3.1 + 3.3).
 5. Ajouter le **partage entrant** et les raccourcis PWA (3.4).
 6. Industrialiser : CI, HTTPS, sauvegardes, supervision (3.7).

@@ -11,11 +11,11 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 | --- | --- |
 | **Notes** | Recherche, chips de catégories, grille 2 colonnes, vignettes d'images, dates « 12:12 / Hier 18:51 / 6 Novembre » |
 | **Tâches** | Liste de tâches autonome (séparée des notes), recherche, édition sur place, ajout rapide par panneau |
-| **Note** | Lecture puis édition au toucher : annuler / rétablir / valider, texte + cases mélangés |
+| **Note** | Lecture puis édition au toucher : annuler / rétablir / valider, texte + cases mélangés, croquis, note vocale, image |
 | **Format** | Barre défilante (ordre du téléphone) : Surligner · H1 · H2 · H3 · Gras · Italique · Barré · Puces · Numérotation · Effacer, avec états actifs |
 | **Sélection** | Appui long : sélection multiple, Tout sélectionner, Masquer / Épingler / Déplacer / Supprimer |
 | **Dossiers** | Page dédiée (Tous, dossiers, Sans catégorie), compteurs, création, suppression |
-| **Réglages** | Xiaomi Cloud, Style, Fonctionnalités rapides, Rappels, AUTRE — en-tête compact au défilement |
+| **Réglages** | Xiaomi Cloud, Style, Fonctionnalités rapides, Rappels, AUTRE (corbeille, notes masquées, thème, export / import JSON) — en-tête compact au défilement |
 | **Corbeille** | Restauration et suppression définitive |
 
 ## Mécaniques fidèles
@@ -36,6 +36,12 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
   pour créer des sous-tâches » (rappel + Terminé) ; il ajoute des tâches, pas des notes.
   Entrée crée la tâche **et referme le panneau** : on ne reste pas en mode création.
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.
+- **Croquis** : canevas avec 6 couleurs, gomme et 3 épaisseurs, inséré comme image dans la note.
+- **Note vocale** : enregistrement via `MediaRecorder`, lecteur audio intégré à la note.
+- **Rappel** : 1 h / ce soir / demain / date libre ; cloche + heure sur la carte. Il sonne tant que
+  l'app est ouverte (les rappels garantis app fermée viendront avec le serveur et le push).
+- **Partage** : texte, image PNG de la note, ou export Markdown (`.md`).
+- **Restauration** : export / import JSON complet (notes, dossiers, tâches).
 - **Titre de secours** : sans titre, la première ligne du texte devient le titre de la carte.
 - **Dates** : heure pour aujourd'hui, `Hier HH:MM`, sinon jour + mois capitalisé.
 

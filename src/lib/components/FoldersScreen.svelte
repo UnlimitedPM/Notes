@@ -7,14 +7,14 @@
 
   interface Props {
     onclose: () => void;
+    ontrash: () => void;
   }
 
-  let { onclose }: Props = $props();
+  let { onclose, ontrash }: Props = $props();
 
   let adding = $state(false);
   let name = $state('');
   let input = $state<HTMLInputElement | null>(null);
-  let deleteMode = $state(false);
 
   const allCount = $derived(notesStore.active.length);
   const noneCount = $derived(notesStore.active.filter((n) => !n.folderId).length);
@@ -54,12 +54,7 @@
       <Icon name="back" size={24} />
     </button>
     <h1>Dossiers</h1>
-    <button
-      class="icon-btn"
-      class:active={deleteMode}
-      onclick={() => (deleteMode = !deleteMode)}
-      aria-label="Supprimer un dossier"
-    >
+    <button class="icon-btn" onclick={ontrash} aria-label="Corbeille">
       <Icon name="trash" size={23} />
     </button>
   </header>
@@ -82,15 +77,11 @@
             {/if}
           </span>
           <span class="folder-name">{folder.name}</span>
-          {#if !deleteMode}
-            <span class="count">{notesStore.countFolder(folder.id)}</span>
-          {/if}
+          <span class="count">{notesStore.countFolder(folder.id)}</span>
         </button>
-        {#if deleteMode}
-          <button class="row-delete" onclick={() => remove(folder)} aria-label={`Supprimer ${folder.name}`}>
-            <Icon name="trash" size={20} />
-          </button>
-        {/if}
+        <button class="row-delete" onclick={() => remove(folder)} aria-label={`Supprimer ${folder.name}`}>
+          <Icon name="trash" size={19} />
+        </button>
       </div>
     {/each}
 
@@ -146,10 +137,6 @@
     font-size: 19px;
     font-weight: 500;
     letter-spacing: -0.2px;
-  }
-
-  .icon-btn.active {
-    color: var(--accent);
   }
 
   .folders-scroll {
@@ -210,13 +197,11 @@
   }
 
   .row-delete {
-    width: 44px;
-    height: 44px;
-    margin-bottom: 10px;
+    width: 40px;
+    height: 56px;
     display: grid;
     place-items: center;
-    border-radius: 12px;
-    color: var(--danger);
+    color: var(--text-3);
   }
 
   .new-card {
