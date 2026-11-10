@@ -281,6 +281,14 @@ class NotesStore {
     if (this.started) return;
     this.started = true;
 
+    // Demande au navigateur de ne pas évincer nos données (sinon IndexedDB peut être
+    // vidé quand le stockage de l'appareil est plein).
+    try {
+      void navigator.storage?.persist?.();
+    } catch {
+      /* pas supporté */
+    }
+
     try {
       let notes = await loadAllNotes();
       let seeded = false;

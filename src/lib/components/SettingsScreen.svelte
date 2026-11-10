@@ -4,6 +4,7 @@
   import { notesStore } from '../notes.svelte';
   import type { LayoutKey, SortKey, TextSizeKey, ThemeKey } from '../types';
   import { toast } from '../toast.svelte';
+  import pkg from '../../../package.json';
 
   type SheetName =
     | 'size'
@@ -24,6 +25,9 @@
 
   let sheet = $state<SheetName>(null);
   let scrolled = $state(false);
+
+  // Version lue dans package.json (source unique de vérité).
+  const appVersion = pkg.version;
 
   const sizeLabels: Record<TextSizeKey, string> = {
     small: 'Petite',
@@ -176,7 +180,7 @@
     </button>
     <div class="row plain">
       <span class="label">Version</span>
-      <span class="value">0.3.0</span>
+      <span class="value">{appVersion}</span>
     </div>
   </div>
 
