@@ -38,8 +38,9 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.
 - **Croquis** : canevas avec 6 couleurs, gomme et 3 épaisseurs, inséré comme image dans la note.
 - **Note vocale** : enregistrement via `MediaRecorder`, lecteur audio intégré à la note.
-- **Médias supprimables** : un appui sur une image ou un audio le sélectionne et fait
-  apparaître une poubelle ; `Retour arrière` / `Suppr` le retire aussi.
+- **Médias supprimables** : en édition, une pastille rouge est posée sur chaque image /
+  note vocale. Comme le lecteur audio natif avale les appuis, la suppression passe aussi par
+  `⋮` → *Supprimer la note vocale N* (ou *l'image N*), qui reste toujours accessible.
 - **Rappel** : 1 h / ce soir / demain / date libre ; cloche + heure sur la carte. Il sonne tant que
   l'app est ouverte (les rappels garantis app fermée viendront avec le serveur et le push).
 - **Partage** : texte, image PNG de la note, ou export Markdown (`.md`).

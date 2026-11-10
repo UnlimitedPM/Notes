@@ -55,7 +55,7 @@ export const NOTE_RICHE = base({
     '<ol><li>Première</li><li>Deuxième</li></ol>' +
     '<div class="task-line" data-checked="true">Tâche faite</div>' +
     '<div class="task-line" data-checked="false">Tâche à faire</div>' +
-    `<div><img src="${PNG_1PX}" alt="" /></div>` +
+    `<div><img src="${PNG_1PX}" width="320" height="180" alt="" /></div>` +
     `<div><audio controls src="${WAV_VIDE}"></audio></div>`,
   color: 'yellow',
   folderId: 'folder-work',

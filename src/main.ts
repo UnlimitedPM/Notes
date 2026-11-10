@@ -13,7 +13,11 @@ registerSW({ immediate: true });
 function trackViewportHeight() {
   const vv = window.visualViewport;
   const apply = () => {
-    const height = vv ? vv.height : window.innerHeight;
+    const layout = Math.max(window.innerHeight, document.documentElement.clientHeight);
+    const visual = vv ? vv.height : layout;
+    // Clavier ouvert : le viewport visuel devient nettement plus petit.
+    // Sinon on garde la hauteur de mise en page (évite une bande vide en bas).
+    const height = visual < layout - 120 ? visual : layout;
     document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`);
   };
   apply();

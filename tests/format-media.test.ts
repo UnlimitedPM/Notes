@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { escapeHtml, formatCardDate, htmlToText, plainText } from '../src/lib/format';
-import { findMedia, removeMedia } from '../src/lib/media';
+import { findMedia, listMedia, removeMedia, removeMediaAt } from '../src/lib/media';
 import { NOTE_RICHE } from './fixtures';
 
 describe('htmlToText', () => {
@@ -103,6 +103,56 @@ describe('findMedia / removeMedia (suppression des images et audios)', () => {
     const audio = host.querySelector('audio')!;
     removeMedia(audio);
     expect(host.innerHTML).not.toContain('<audio');
+    host.remove();
+  });
+});
+
+describe('listMedia / removeMediaAt (feuille « Plus d’options »)', () => {
+  function note(): HTMLElement {
+    const host = document.createElement('div');
+    host.innerHTML =
+      '<div>texte</div>' +
+      '<div><img src="data:image/png;base64,AA" /></div>' +
+      '<div><audio controls src="data:audio/wav;base64,AA"></audio></div>' +
+      '<div><img src="data:image/png;base64,BB" /></div>' +
+      '<div><audio controls src="data:audio/wav;base64,CC"></audio></div>';
+    document.body.appendChild(host);
+    return host;
+  }
+
+  it('numérote les médias par type', () => {
+    const host = note();
+    expect(listMedia(host)).toEqual([
+      { kind: 'img', n: 1 },
+      { kind: 'audio', n: 1 },
+      { kind: 'img', n: 2 },
+      { kind: 'audio', n: 2 }
+    ]);
+    host.remove();
+  });
+
+  it('renvoie une liste vide sans note', () => {
+    expect(listMedia(null)).toEqual([]);
+  });
+
+  it('supprime le média demandé et pas un autre', () => {
+    const host = note();
+    const removed = removeMediaAt(host, 1);
+    expect(removed?.tagName).toBe('AUDIO');
+    expect(host.querySelectorAll('audio')).toHaveLength(1);
+    expect(host.querySelectorAll('img')).toHaveLength(2);
+    expect(listMedia(host)).toEqual([
+      { kind: 'img', n: 1 },
+      { kind: 'img', n: 2 },
+      { kind: 'audio', n: 1 }
+    ]);
+    host.remove();
+  });
+
+  it('ne fait rien pour un index hors limites', () => {
+    const host = note();
+    expect(removeMediaAt(host, 9)).toBeNull();
+    expect(host.querySelectorAll('img, audio')).toHaveLength(4);
     host.remove();
   });
 });

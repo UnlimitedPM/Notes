@@ -8,7 +8,7 @@
   import { NOTE_COLORS } from '../colors';
   import { formatNoteDate, htmlToText } from '../format';
   import { noteToMarkdown } from '../markdown';
-  import { findMedia, removeMedia } from '../media';
+  import { listMedia, removeMediaAt as removeMediaElementAt } from '../media';
   import {
     imageFilename,
     markdownFilename,
@@ -111,7 +111,6 @@
   function stopEditing() {
     formatOpen = false;
     highlightPending = false;
-    clearMediaSelection();
     flush();
     editing = false;
     (document.activeElement as HTMLElement | null)?.blur();
@@ -472,8 +471,9 @@
   }
 
   function highlightColor(): string {
-    // Couleurs relevées sur l'app MIUI du téléphone.
-    return document.documentElement.dataset.theme === 'light' ? '#FFE58A' : '#817962';
+    // Sur une note colorée (fond clair), on utilise la teinte claire comme en thème clair.
+    const lightNote = note.color !== 'default';
+    return lightNote || document.documentElement.dataset.theme === 'light' ? '#FFE58A' : '#817962';
   }
 
   type FormatTool = {
@@ -716,11 +716,6 @@
   }
 
   function onBodyKeydown(event: KeyboardEvent) {
-    if (selectedMedia && (event.key === 'Backspace' || event.key === 'Delete')) {
-      event.preventDefault();
-      removeSelectedMedia();
-      return;
-    }
     if (event.key !== 'Enter' || event.shiftKey) return;
 
     // Entrée sur une puce vide : on sort de la liste (ligne normale).
@@ -770,16 +765,6 @@
 
   function onBodyClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
-
-    // Image ou audio : on le sélectionne pour proposer la suppression.
-    const media = findMedia(event.target);
-    if (media && editing && bodyEl?.contains(media)) {
-      selectMedia(media);
-      if (formatOpen) formatOpen = false;
-      return;
-    }
-    if (selectedMedia) clearMediaSelection();
-
     const line = target.closest('.task-line') as HTMLElement | null;
     if (!line) {
       if (formatOpen) formatOpen = false;
@@ -797,43 +782,73 @@
   }
 
   // ---- Suppression d'un média (image / audio) -----------------------------
-  let selectedMedia = $state<HTMLElement | null>(null);
-  let mediaBox = $state<{ top: number; left: number } | null>(null);
+  // Une poubelle est posée sur chaque image / audio tant qu'on édite : pas besoin
+  // de « sélectionner » le média (un appui sur le lecteur audio ne remonte pas).
+  let mediaChips = $state<{ index: number; top: number; left: number }[]>([]);
+  let docHost = $state<HTMLElement | null>(null);
 
-  function mediaOffsets(media: HTMLElement): { top: number; left: number } {
-    const doc = media.offsetParent as HTMLElement | null;
-    const mediaRect = media.getBoundingClientRect();
-    const parentRect = doc?.getBoundingClientRect() ?? bodyEl?.getBoundingClientRect();
-    const baseTop = parentRect?.top ?? 0;
-    const baseLeft = parentRect?.left ?? 0;
-    return {
-      top: mediaRect.top - baseTop,
-      left: mediaRect.left - baseLeft + mediaRect.width
-    };
+  function refreshMediaChips() {
+    if (!editing || !bodyEl) {
+      mediaChips = [];
+      return;
+    }
+    // offsetTop/offsetLeft sont indépendants du défilement : les pastilles restent
+    // collées au média quand la note défile.
+    mediaChips = Array.from(bodyEl.querySelectorAll('img, audio')).map((el, index) => {
+      const node = el as HTMLElement;
+      const top = node.offsetTop;
+      const right = node.offsetLeft + node.offsetWidth;
+      return {
+        index,
+        top: Math.max(2, top - 8),
+        left: Math.max(2, right - 26)
+      };
+    });
   }
 
-  function selectMedia(media: HTMLElement) {
-    selectedMedia = media;
-    mediaBox = mediaOffsets(media);
-  }
-
-  function clearMediaSelection() {
-    selectedMedia = null;
-    mediaBox = null;
-  }
-
-  function syncMediaBox() {
-    if (selectedMedia && selectedMedia.isConnected) mediaBox = mediaOffsets(selectedMedia);
-  }
-
-  function removeSelectedMedia() {
-    const media = selectedMedia;
-    if (!media) return;
-    removeMedia(media);
-    clearMediaSelection();
+  function removeMediaAt(index: number) {
+    if (!removeMediaElementAt(bodyEl, index)) return;
     onBodyInput();
+    refreshMediaChips();
+    refreshMediaItems();
     toast.show('Média supprimé');
   }
+
+  // ---- Liste des médias de la note (feuille « Plus d'options ») -------------
+  // Une pastille posée sur un lecteur audio n'est pas fiable (le lecteur natif
+  // avale le clic) : la suppression passe aussi par cette liste.
+  let mediaItems = $state<{ kind: 'img' | 'audio'; n: number }[]>([]);
+
+  function openMore() {
+    refreshMediaItems();
+    sheet = 'more';
+  }
+
+  function refreshMediaItems() {
+    mediaItems = listMedia(bodyEl);
+  }
+
+  $effect(() => {
+    // recalculé à chaque édition, changement de contenu ou d'outils
+    void editing;
+    void html;
+    void formatOpen;
+    refreshMediaChips();
+  });
+
+  $effect(() => {
+    const host = docHost;
+    if (!host) return;
+    // le média bouge quand la note est redimensionnée (rotation, clavier…)
+    const ro = new ResizeObserver(() => refreshMediaChips());
+    ro.observe(host);
+    if (bodyEl) ro.observe(bodyEl);
+    window.addEventListener('resize', refreshMediaChips);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', refreshMediaChips);
+    };
+  });
 
   function pickImage() {
     fileEl?.click();
@@ -1080,14 +1095,13 @@
         <button class="icon-btn" onclick={() => (sheet = 'color')} aria-label="Style de la note">
           <Icon name="tshirt" size={22} />
         </button>
-        <button class="icon-btn" onclick={() => (sheet = 'more')} aria-label="Plus d'options">
+        <button class="icon-btn" onclick={openMore} aria-label="Plus d'options">
           <Icon name="more" size={22} />
-        </button>
-      </div>
+        </button>      </div>
     {/if}
   </header>
 
-  <div class="doc">
+  <div class="doc" bind:this={docHost}>
     <input
       bind:this={titleEl}
       bind:value={title}
@@ -1127,15 +1141,19 @@
       onclick={onBodyClick}
     ></div>
 
-    {#if selectedMedia && mediaBox && editing}
-      <button
-        class="media-del"
-        style="top:{Math.max(4, mediaBox.top - 14)}px;left:{Math.max(4, mediaBox.left - 24)}px"
-        onclick={removeSelectedMedia}
-        aria-label="Supprimer le média"
-      >
-        <Icon name="trash" size={15} />
-      </button>
+    {#if editing}
+      {#each mediaChips as chip (chip.index)}
+        <button
+          class="media-del"
+          style="top:{chip.top}px;left:{chip.left}px"
+          onpointerdown={(event) => event.preventDefault()}
+          onclick={() => removeMediaAt(chip.index)}
+          title="Supprimer le média"
+          aria-label="Supprimer le média"
+        >
+          <Icon name="trash" size={14} />
+        </button>
+      {/each}
     {/if}
   </div>
 
@@ -1278,6 +1296,16 @@
         <Icon name="copy" size={22} />
         <span class="grow">Dupliquer</span>
       </button>
+      {#if mediaItems.length}
+        {#each mediaItems as item, index (item.kind + index)}
+          <button class="sheet-row" onclick={() => removeMediaAt(index)}>
+            <Icon name={item.kind === 'audio' ? 'waveform' : 'image'} size={22} />
+            <span class="grow">
+              {item.kind === 'audio' ? `Supprimer la note vocale ${item.n}` : `Supprimer l'image ${item.n}`}
+            </span>
+          </button>
+        {/each}
+      {/if}
       <button class="sheet-row danger" onclick={removeNote}>
         <Icon name="trash" size={22} />
         <span class="grow">Supprimer</span>
@@ -1441,14 +1469,15 @@
   .media-del {
     position: absolute;
     z-index: 5;
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     display: grid;
     place-items: center;
     border-radius: 50%;
     background: var(--danger);
     color: #fff;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border: 1.5px solid rgba(255, 255, 255, 0.75);
   }
 
   .note-body :global(h1) {

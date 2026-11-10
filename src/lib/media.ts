@@ -9,3 +9,33 @@ export function findMedia(target: EventTarget | null): HTMLElement | null {
 export function removeMedia(media: Element): void {
   media.remove();
 }
+
+export type MediaEntry = { kind: 'img' | 'audio'; n: number };
+
+/**
+ * Liste les médias d'une note, numérotés par type (« Image 1 », « Note vocale 1 »…).
+ * Sert à la feuille « Plus d'options » : un appui sur la pastille posée sur un
+ * lecteur audio n'est pas fiable, le lecteur natif avale le clic.
+ */
+export function listMedia(root: ParentNode | null): MediaEntry[] {
+  if (!root) return [];
+  let img = 0;
+  let audio = 0;
+  return Array.from(root.querySelectorAll('img, audio')).map((el) => {
+    if (el.tagName === 'AUDIO') {
+      audio += 1;
+      return { kind: 'audio' as const, n: audio };
+    }
+    img += 1;
+    return { kind: 'img' as const, n: img };
+  });
+}
+
+/** Supprime le n-ième média (même ordre que `listMedia`) et renvoie l'élément retiré. */
+export function removeMediaAt(root: ParentNode | null, index: number): Element | null {
+  if (!root) return null;
+  const media = Array.from(root.querySelectorAll('img, audio'))[index] ?? null;
+  if (!media) return null;
+  removeMedia(media);
+  return media;
+}
