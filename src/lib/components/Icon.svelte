@@ -3,6 +3,7 @@ const ICONS: Record<string, string> = {
   back: '<path d="M14.6 4.8 7.4 12l7.2 7.2"/>',
   more: '<g fill="currentColor" stroke="none"><circle cx="12" cy="4.9" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19.1" r="1.7"/></g>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  'plus-lg': '<path d="M12 3.2v17.6M3.2 12h17.6"/>',
   close: '<path d="M6.2 6.2 17.8 17.8M17.8 6.2 6.2 17.8"/>',
   check: '<path d="M4.6 12.6 9 17 19.4 6.6"/>',
   pin: '<path d="M9.2 3.6h5.6l-.9 5.4 3.3 3.4H6.8l3.3-3.4-.9-5.4Z"/><path d="M12 12.4V20"/>',

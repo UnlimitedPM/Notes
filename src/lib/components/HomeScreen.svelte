@@ -324,7 +324,7 @@
       onclick={tab === 'tasks' ? openComposer : onnew}
       aria-label={tab === 'tasks' ? 'Nouvelle tâche' : 'Nouvelle note'}
     >
-      <Icon name="plus" size={22} stroke={2} />
+      <Icon name="plus-lg" size={27} stroke={3} />
     </button>
     <TabBar {tab} {ontab} />
   {/if}
@@ -536,11 +536,11 @@
 
   .fab {
     position: absolute;
-    right: 30px;
-    bottom: calc(70px + 18px + var(--safe-bottom));
+    right: 35px;
+    bottom: calc(70px + 6px + var(--safe-bottom));
     z-index: 20;
-    width: 52px;
-    height: 52px;
+    width: 57px;
+    height: 57px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
