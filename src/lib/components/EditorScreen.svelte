@@ -140,15 +140,28 @@
     return null;
   }
 
-  function hasHighlight(): boolean {
+  function highlightedNodes(): HTMLElement[] {
+    if (!bodyEl) return [];
+    return Array.from(bodyEl.querySelectorAll<HTMLElement>('span, font')).filter(
+      (el) => !!el.style.backgroundColor && el.style.backgroundColor !== 'transparent'
+    );
+  }
+
+  function selectionHasHighlight(): boolean {
+    if (!bodyEl) return false;
     const selection = document.getSelection();
-    if (!selection) return false;
+    if (!selection || !selection.rangeCount) return false;
+
+    const range = selection.getRangeAt(0);
+    for (const node of highlightedNodes()) {
+      if (range.intersectsNode(node)) return true;
+    }
+
     let node: Node | null = selection.anchorNode;
     let el: HTMLElement | null =
       node?.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : (node?.parentElement ?? null);
     while (el && el !== bodyEl) {
-      const bg = getComputedStyle(el).backgroundColor;
-      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return true;
+      if (el.style.backgroundColor && el.style.backgroundColor !== 'transparent') return true;
       el = el.parentElement;
     }
     return false;
@@ -164,7 +177,7 @@
       h1: tag === 'H1',
       h2: tag === 'H2',
       h3: tag === 'H3',
-      highlight: hasHighlight()
+      highlight: selectionHasHighlight()
     };
   }
 
@@ -199,8 +212,27 @@
   }
 
   function toggleHighlight() {
-    if (hasHighlight()) {
-      exec('hiliteColor', 'transparent');
+    ensureFocus();
+    const selection = document.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+
+    if (range.collapsed) {
+      toast.show('Sélectionnez du texte pour surligner');
+      return;
+    }
+
+    if (selectionHasHighlight()) {
+      for (const node of highlightedNodes()) {
+        if (!range.intersectsNode(node)) continue;
+        node.style.backgroundColor = '';
+        if (!node.getAttribute('style')) {
+          const parent = node.parentNode;
+          while (node.firstChild) parent?.insertBefore(node.firstChild, node);
+          node.remove();
+        }
+      }
+      onBodyInput();
     } else {
       exec('hiliteColor', highlightColor());
     }
