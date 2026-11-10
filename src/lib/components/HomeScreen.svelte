@@ -379,7 +379,7 @@
 <style>
   .home {
     position: relative;
-    height: 100dvh;
+    height: var(--app-height, 100dvh);
     display: flex;
     flex-direction: column;
     overflow: hidden;
