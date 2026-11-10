@@ -12,7 +12,7 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 | **Notes** | Recherche, chips de catégories, grille 2 colonnes, vignettes d'images, dates « 12:12 / Hier 18:51 / 6 Novembre » |
 | **Tâches** | Liste de tâches autonome (séparée des notes), édition sur place, ajout rapide par panneau |
 | **Note** | Lecture puis édition au toucher : annuler / rétablir / valider, texte + cases mélangés |
-| **Format** | Barre H1 · H2 · H3 · Gras · Italique · Surligner · Effacer, avec états actifs |
+| **Format** | Barre défilante : Surligner · Puces · Numérotation · H1 · H2 · H3 · Gras · Italique · Barré · Effacer, avec états actifs |
 | **Sélection** | Appui long : sélection multiple, Tout sélectionner, Masquer / Épingler / Déplacer / Supprimer |
 | **Dossiers** | Page dédiée (Tous, dossiers, Sans catégorie), compteurs, création, suppression |
 | **Réglages** | Xiaomi Cloud, Style, Fonctionnalités rapides, Rappels, AUTRE — en-tête compact au défilement |
@@ -29,6 +29,9 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 - **Formatage réversible** : chaque bouton s'active en ambre et se désactive au second appui,
   la sélection est préservée entre les appuis. Le surligneur agit aussi comme état de frappe :
   appuyer, écrire (le texte est surligné), réappuyer ou faire Entrée (la suite redevient normale).
+  Même logique pour le barré.
+- **Listes dans le texte** : puces (`•`) et liste numérotée (`1.`), conversion d'un type à l'autre
+  en un tap, retour à une ligne normale en réappuyant sur le bouton ou via Entrée sur une puce vide.
 - **Création rapide de tâche** : le + de l'onglet Tâches ouvre le panneau « Appuyez sur Entrée
   pour créer des sous-tâches » (rappel + Terminé) ; il ajoute des tâches, pas des notes.
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.

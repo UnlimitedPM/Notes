@@ -34,6 +34,8 @@
   let sheet = $state<SheetName>(null);
   let savedRange: Range | null = null;
   let highlightPending = $state(false);
+  let formatScrollEl = $state<HTMLDivElement | null>(null);
+  let formatAtEnd = $state(false);
 
   let pending: Partial<Note> = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -45,9 +47,12 @@
   let format = $state({
     bold: false,
     italic: false,
+    strike: false,
     h1: false,
     h2: false,
     h3: false,
+    ul: false,
+    ol: false,
     highlight: false
   });
 
@@ -115,16 +120,32 @@
 
   function ensureFocus() {
     if (!bodyEl) return;
-    if (!document.activeElement || !bodyEl.contains(document.activeElement)) {
-      bodyEl.focus();
+    const selection = document.getSelection();
+    const liveCaret =
+      !!selection &&
+      selection.rangeCount > 0 &&
+      !!selection.anchorNode &&
+      bodyEl.contains(selection.anchorNode);
+    if (liveCaret) {
+      // Le curseur réel est déjà dans la note : surtout ne pas le remplacer par un
+      // Range mémorisé (il peut être périmé, ce qui ferait sauter le curseur).
+      if (document.activeElement !== bodyEl) bodyEl.focus({ preventScroll: true });
+      return;
     }
+    bodyEl.focus({ preventScroll: true });
     if (savedRange) {
-      const selection = document.getSelection();
-      if (selection) {
+      if (selection && bodyEl.contains(savedRange.startContainer)) {
         selection.removeAllRanges();
         selection.addRange(savedRange);
       }
     }
+  }
+
+  /** La barre de mise en forme défile : on masque l'indice de défilement en fin de course. */
+  function syncFormatScroll() {
+    const el = formatScrollEl;
+    if (!el) return;
+    formatAtEnd = el.scrollWidth - (el.scrollLeft + el.clientWidth) < 8;
   }
 
   function blockElement(): HTMLElement | null {
@@ -135,8 +156,9 @@
     if (!node || !bodyEl.contains(node)) return null;
     let el: HTMLElement | null =
       node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+    // La ligne la plus proche (div, li, titre…), pas seulement l'enfant direct du corps.
     while (el && el !== bodyEl) {
-      if (el.parentElement === bodyEl) return el;
+      if (/^(DIV|P|LI|H1|H2|H3|BLOCKQUOTE|PRE)$/.test(el.tagName)) return el;
       el = el.parentElement;
     }
     return null;
@@ -180,9 +202,12 @@
     format = {
       bold: document.queryCommandState('bold'),
       italic: document.queryCommandState('italic'),
+      strike: document.queryCommandState('strikeThrough'),
       h1: tag === 'H1',
       h2: tag === 'H2',
       h3: tag === 'H3',
+      ul: document.queryCommandState('insertUnorderedList') || listAncestor(block)?.tagName === 'UL',
+      ol: document.queryCommandState('insertOrderedList') || listAncestor(block)?.tagName === 'OL',
       highlight: highlightPending || selectionHasHighlight()
     };
   }
@@ -202,8 +227,211 @@
     exec('italic');
   }
 
+  function toggleStrike() {
+    ensureFocus();
+    const selection = document.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+
+    if (range.collapsed) {
+      if (nearestDecoration() === 'line-through') {
+        if (!splitStrikeAtCaret()) exec('strikeThrough');
+      } else {
+        exec('strikeThrough');
+      }
+      refreshFormat();
+      return;
+    }
+    exec('strikeThrough');
+    refreshFormat();
+  }
+
+  function nearestDecoration(): string | null {
+    if (!bodyEl) return null;
+    const selection = document.getSelection();
+    let node: Node | null = selection?.anchorNode ?? null;
+    if (!node || !bodyEl.contains(node)) return null;
+    let el: HTMLElement | null =
+      node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+    while (el && el !== bodyEl) {
+      const deco = el.style?.textDecorationLine || el.style?.textDecoration || '';
+      if (deco.includes('line-through')) return 'line-through';
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function toggleList(kind: 'ul' | 'ol') {
+    ensureFocus();
+    const current = listAncestor(caretItem() ?? blockElement());
+    if (!current) {
+      // Chrome recrée les nœuds en fabriquant la liste et replace le curseur au début
+      // de la ligne : on retient l'index du curseur dans la ligne puis on le replace.
+      const block = blockElement();
+      const index = block ? caretIndexIn(block) : null;
+      exec(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList');
+      const item = caretItem();
+      if (item) placeCaretAtTextIndex(item, index ?? (item.textContent?.length ?? 0));
+      refreshFormat();
+      return;
+    }
+    if (current.tagName === kind.toUpperCase()) {
+      unwrapCaretItem(current);
+    } else {
+      convertList(current, kind);
+    }
+    onBodyInput();
+    refreshFormat();
+  }
+
+  /** Nombre de caractères entre le début du bloc et le curseur. */
+  function caretIndexIn(block: HTMLElement): number | null {
+    const selection = document.getSelection();
+    if (!selection || !selection.anchorNode || !block.contains(selection.anchorNode)) return null;
+    const range = document.createRange();
+    range.selectNodeContents(block);
+    range.setEnd(selection.anchorNode, selection.anchorOffset);
+    return range.toString().length;
+  }
+
+  function placeCaretAtTextIndex(root: HTMLElement, index: number): void {
+    const selection = document.getSelection();
+    if (!selection) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let remaining = index;
+    let node: Node | null = null;
+    while (walker.nextNode()) {
+      const len = walker.currentNode.textContent?.length ?? 0;
+      if (remaining <= len) {
+        node = walker.currentNode;
+        break;
+      }
+      remaining -= len;
+    }
+    const range = document.createRange();
+    if (node) {
+      range.setStart(node, Math.min(remaining, node.textContent?.length ?? 0));
+      range.collapse(true);
+    } else {
+      range.selectNodeContents(root);
+      range.collapse(false);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedRange = range.cloneRange();
+  }
+
+  /** Le <li> sous le curseur (blockElement() renvoie la liste entière, pas la ligne). */
+  function caretItem(): HTMLElement | null {
+    if (!bodyEl) return null;
+    const selection = document.getSelection();
+    let node: Node | null = selection?.anchorNode ?? null;
+    if (!node || !bodyEl.contains(node)) return null;
+    let el: HTMLElement | null =
+      node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+    while (el && el !== bodyEl) {
+      if (el.tagName === 'LI') return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * Change le type de toute la liste (puces <-> numéros). Le navigateur, lui, coupe la
+   * liste en deux au niveau du curseur quand on change de type.
+   * Le curseur est mémorisé sous forme (nœud, décalage) : un Range serait déplacé par
+   * le navigateur au moment où l'ancienne liste quitte le DOM.
+   */
+  function convertList(list: HTMLElement, kind: 'ul' | 'ol') {
+    const selection = document.getSelection();
+    const anchorNode = selection?.anchorNode ?? null;
+    const anchorOffset = selection?.anchorOffset ?? 0;
+    const focusNode = selection?.focusNode ?? null;
+    const focusOffset = selection?.focusOffset ?? 0;
+    const wasCollapsed = selection?.isCollapsed ?? true;
+
+    const target = document.createElement(kind);
+    while (list.firstChild) target.appendChild(list.firstChild);
+    list.replaceWith(target);
+
+    if (selection && anchorNode && target.contains(anchorNode)) {
+      const restored = document.createRange();
+      restored.setStart(anchorNode, Math.min(anchorOffset, anchorNode.textContent?.length ?? 0));
+      if (wasCollapsed || !focusNode || !target.contains(focusNode)) {
+        restored.collapse(true);
+      } else {
+        restored.setEnd(focusNode, Math.min(focusOffset, focusNode.textContent?.length ?? 0));
+      }
+      selection.removeAllRanges();
+      selection.addRange(restored);
+      savedRange = restored.cloneRange();
+    }
+  }
+
+  /** Retire la puce / le numéro de la ligne courante (les autres lignes restent listées). */
+  function unwrapCaretItem(list: HTMLElement) {
+    const li = caretItem();
+    if (!li || li.parentElement !== list) return;
+
+    const following: Node[] = [];
+    let passed = false;
+    for (const child of Array.from(list.childNodes)) {
+      if (child === li) {
+        passed = true;
+        continue;
+      }
+      if (passed) following.push(child);
+    }
+
+    const selection = document.getSelection();
+    const anchorNode = selection?.anchorNode ?? null;
+    const anchorOffset = selection?.anchorOffset ?? 0;
+
+    const line = document.createElement('div');
+    while (li.firstChild) line.appendChild(li.firstChild);
+    if (!line.firstChild) line.appendChild(document.createElement('br'));
+    li.remove();
+    list.after(line);
+
+    if (following.length) {
+      const tail = list.cloneNode(false) as HTMLElement;
+      for (const node of following) tail.appendChild(node);
+      line.after(tail);
+    }
+    if (!list.childNodes.length) list.remove();
+
+    if (selection) {
+      const restored = document.createRange();
+      if (anchorNode && line.contains(anchorNode)) {
+        restored.setStart(anchorNode, Math.min(anchorOffset, anchorNode.textContent?.length ?? 0));
+        restored.collapse(true);
+      } else {
+        restored.selectNodeContents(line);
+        restored.collapse(false);
+      }
+      selection.removeAllRanges();
+      selection.addRange(restored);
+      savedRange = restored.cloneRange();
+    }
+  }
+
+  function listAncestor(from: HTMLElement | null): HTMLElement | null {
+    let el: HTMLElement | null = from;
+    while (el && el !== bodyEl) {
+      if (el.tagName === 'UL' || el.tagName === 'OL') return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   function toggleHeading(level: 1 | 2 | 3) {
     ensureFocus();
+    // Un titre ne peut pas vivre dans une liste : on sort d'abord la ligne de la liste.
+    const list = listAncestor(caretItem());
+    if (list) {
+      unwrapCaretItem(list);
+      onBodyInput();
+    }
     const block = blockElement();
     if (block && block.tagName === `H${level}`) {
       exec('formatBlock', 'DIV');
@@ -216,6 +444,84 @@
   function highlightColor(): string {
     return document.documentElement.dataset.theme === 'light' ? '#FFE58A' : '#4D3F12';
   }
+
+  type FormatTool = {
+    label: string;
+    icon?: string;
+    text?: string;
+    glyphClass?: string;
+    active?: () => boolean;
+    run: () => void;
+  };
+
+  // Ordre : les listes (puces / numéros) d'abord, puis les styles de texte.
+  const formatTools = $derived<FormatTool[]>([
+    {
+      label: 'Surligner',
+      icon: 'highlighter',
+      active: () => format.highlight,
+      run: toggleHighlight
+    },
+    {
+      label: 'Liste à puces',
+      icon: 'list-bullet',
+      active: () => format.ul,
+      run: () => toggleList('ul')
+    },
+    {
+      label: 'Liste numérotée',
+      icon: 'list-number',
+      active: () => format.ol,
+      run: () => toggleList('ol')
+    },
+    {
+      label: 'Titre 1',
+      text: 'H1',
+      glyphClass: 'hglyph',
+      active: () => format.h1,
+      run: () => toggleHeading(1)
+    },
+    {
+      label: 'Titre 2',
+      text: 'H2',
+      glyphClass: 'hglyph',
+      active: () => format.h2,
+      run: () => toggleHeading(2)
+    },
+    {
+      label: 'Titre 3',
+      text: 'H3',
+      glyphClass: 'hglyph',
+      active: () => format.h3,
+      run: () => toggleHeading(3)
+    },
+    {
+      label: 'Gras',
+      text: 'B',
+      glyphClass: 'glyph bold',
+      active: () => format.bold,
+      run: toggleBold
+    },
+    {
+      label: 'Italique',
+      text: 'I',
+      glyphClass: 'glyph italic',
+      active: () => format.italic,
+      run: toggleItalic
+    },
+    {
+      label: 'Barré',
+      text: 'S',
+      glyphClass: 'glyph strike',
+      active: () => format.strike,
+      run: toggleStrike
+    },
+    {
+      label: 'Effacer la mise en forme',
+      icon: 'clear-format',
+      run: clearFormat
+    }
+  ]);
 
   function toggleHighlight() {
     ensureFocus();
@@ -277,7 +583,36 @@
       }
       el = el.parentElement;
     }
-    if (!span || !span.parentNode) return;
+    if (!span) return;
+    splitSpanAtCaret(span, range);
+  }
+
+  /** Idem pour le texte barré : le curseur sort du span barré. */
+  function splitStrikeAtCaret(): boolean {
+    const selection = document.getSelection();
+    if (!selection || !selection.rangeCount) return false;
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed) return false;
+
+    let node: Node | null = range.startContainer;
+    let el: HTMLElement | null =
+      node?.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : (node?.parentElement ?? null);
+    let span: HTMLElement | null = null;
+    while (el && el !== bodyEl) {
+      if (/line-through/.test(el.style?.textDecorationLine || el.style?.textDecoration || '')) {
+        span = el;
+        break;
+      }
+      el = el.parentElement;
+    }
+    if (!span) return false;
+    return splitSpanAtCaret(span, range);
+  }
+
+  function splitSpanAtCaret(span: HTMLElement, range: Range): boolean {
+    if (!span.parentNode || !range.collapsed) return false;
+    const selection = document.getSelection();
+    if (!selection) return false;
 
     const leftRange = range.cloneRange();
     leftRange.selectNodeContents(span);
@@ -292,10 +627,10 @@
     right.appendChild(rightRange.extractContents());
 
     const parent = span.parentNode;
-    parent.insertBefore(left, span);
+    if (left.textContent || left.firstElementChild) parent.insertBefore(left, span);
     const marker = document.createTextNode('\u200b');
     parent.insertBefore(marker, span);
-    parent.insertBefore(right, span);
+    if (right.textContent || right.firstElementChild) parent.insertBefore(right, span);
     parent.removeChild(span);
 
     const caret = document.createRange();
@@ -304,6 +639,7 @@
     selection.removeAllRanges();
     selection.addRange(caret);
     savedRange = caret.cloneRange();
+    return true;
   }
 
   function clearFormat() {
@@ -350,6 +686,21 @@
 
   function onBodyKeydown(event: KeyboardEvent) {
     if (event.key !== 'Enter' || event.shiftKey) return;
+
+    // Entrée sur une puce vide : on sort de la liste (ligne normale).
+    const item = caretItem();
+    if (item && !item.textContent?.trim() && !item.querySelector('img')) {
+      const list = listAncestor(item);
+      if (list) {
+        event.preventDefault();
+        highlightPending = false;
+        unwrapCaretItem(list);
+        onBodyInput();
+        refreshFormat();
+        return;
+      }
+    }
+
     const block = blockElement();
 
     if (block && block.classList.contains('task-line')) {
@@ -574,65 +925,34 @@
     <div class="edit-tools">
       {#if formatOpen}
         <div class="format-bar">
+          <div class="format-scroll-wrap" class:at-end={formatAtEnd}>
+            <div class="format-scroll" bind:this={formatScrollEl} onscroll={syncFormatScroll}>
+              {#each formatTools as tool (tool.label)}
+                <button
+                  class="fmt-tool"
+                  class:active={tool.active?.() ?? false}
+                  onpointerdown={(event) => event.preventDefault()}
+                  onclick={tool.run}
+                  aria-label={tool.label}
+                >
+                  {#if tool.icon}
+                    <Icon name={tool.icon} size={22} />
+                  {:else}
+                    <span class={tool.glyphClass}>{tool.text}</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
           <button
-            class="fmt-tool"
-            class:active={format.highlight}
+            class="fmt-tool fmt-close"
             onpointerdown={(event) => event.preventDefault()}
-            onclick={toggleHighlight}
-            aria-label="Surligner"
-          >
-            <Icon name="highlighter" size={22} />
-          </button>
-          <button
-            class="fmt-tool"
-            class:active={format.h1}
-            onpointerdown={(event) => event.preventDefault()}
-            onclick={() => toggleHeading(1)}
-            aria-label="Titre 1"
-          >
-            <span class="hglyph">H1</span>
-          </button>
-          <button
-            class="fmt-tool"
-            class:active={format.h2}
-            onpointerdown={(event) => event.preventDefault()}
-            onclick={() => toggleHeading(2)}
-            aria-label="Titre 2"
-          >
-            <span class="hglyph">H2</span>
-          </button>
-          <button
-            class="fmt-tool"
-            class:active={format.h3}
-            onpointerdown={(event) => event.preventDefault()}
-            onclick={() => toggleHeading(3)}
-            aria-label="Titre 3"
-          >
-            <span class="hglyph">H3</span>
-          </button>
-          <button
-            class="fmt-tool"
-            class:active={format.bold}
-            onpointerdown={(event) => event.preventDefault()}
-            onclick={toggleBold}
-            aria-label="Gras"
-          >
-            <span class="glyph bold">B</span>
-          </button>
-          <button
-            class="fmt-tool"
-            class:active={format.italic}
-            onpointerdown={(event) => event.preventDefault()}
-            onclick={toggleItalic}
-            aria-label="Italique"
-          >
-            <span class="glyph italic">I</span>
-          </button>
-          <button
-            class="fmt-tool"
-            onpointerdown={(event) => event.preventDefault()}
-            onclick={clearFormat}
-            aria-label="Effacer la mise en forme"
+            onclick={() => {
+              formatOpen = false;
+              highlightPending = false;
+              refreshFormat();
+            }}
+            aria-label="Fermer la mise en forme"
           >
             <Icon name="close" size={20} />
           </button>
@@ -671,6 +991,7 @@
             ensureFocus();
             formatOpen = true;
             refreshFormat();
+            setTimeout(syncFormatScroll, 0);
           }}
           aria-label="Mise en forme"
         >
@@ -887,6 +1208,29 @@
     transform: rotate(-45deg);
   }
 
+  .note-body :global(ul),
+  .note-body :global(ol) {
+    margin: 0.35em 0;
+    padding-left: 1.55em;
+  }
+
+  .note-body :global(ul) {
+    list-style: disc outside;
+  }
+
+  .note-body :global(ul ul) {
+    list-style: circle outside;
+  }
+
+  .note-body :global(ol) {
+    list-style: decimal outside;
+  }
+
+  .note-body :global(li) {
+    display: list-item;
+    margin: 0.12em 0;
+  }
+
   .edit-tools {
     flex: 0 0 auto;
     display: flex;
@@ -916,19 +1260,62 @@
 
   .format-bar {
     flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 2px;
   }
 
-  .fmt-tool {
+  .format-scroll {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .format-scroll-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+  }
+
+  .format-scroll-wrap::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--surface-2) 75%);
+    transition: opacity 0.15s ease;
+  }
+
+  .format-scroll-wrap.at-end::after {
+    opacity: 0;
+  }
+
+  .format-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fmt-tool {
+    flex: 0 0 auto;
+    width: 40px;
     height: 48px;
     display: grid;
     place-items: center;
     border-radius: 10px;
     color: var(--text);
+  }
+
+  .fmt-close {
+    margin-left: 2px;
   }
 
   .fmt-tool:active {
@@ -953,6 +1340,11 @@
 
   .glyph.bold {
     font-weight: 800;
+  }
+
+  .glyph.strike {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
   }
 
   .glyph.italic {
