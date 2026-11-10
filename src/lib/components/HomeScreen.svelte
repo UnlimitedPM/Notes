@@ -117,7 +117,6 @@
     if (!text) return false;
     notesStore.addTask(text);
     composerText = '';
-    composerInput?.focus();
     return true;
   }
 
@@ -330,7 +329,8 @@
           onkeydown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
-              commitComposer();
+              // Entrée crée la tâche et referme la création (on ne reste pas en mode ajout).
+              closeComposer();
             }
           }}
         ></textarea>
@@ -340,7 +340,7 @@
           <Icon name="bell" size={19} />
           Définir un rappel
         </button>
-        <button class="done" disabled={!composerText.trim()} onclick={closeComposer}>
+        <button class="done" onclick={closeComposer}>
           Terminé
         </button>
       </div>

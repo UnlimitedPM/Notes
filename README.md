@@ -34,6 +34,7 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
   en un tap, retour à une ligne normale en réappuyant sur le bouton ou via Entrée sur une puce vide.
 - **Création rapide de tâche** : le + de l'onglet Tâches ouvre le panneau « Appuyez sur Entrée
   pour créer des sous-tâches » (rappel + Terminé) ; il ajoute des tâches, pas des notes.
+  Entrée crée la tâche **et referme le panneau** : on ne reste pas en mode création.
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.
 - **Titre de secours** : sans titre, la première ligne du texte devient le titre de la carte.
 - **Dates** : heure pour aujourd'hui, `Hier HH:MM`, sinon jour + mois capitalisé.
