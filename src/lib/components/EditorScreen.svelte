@@ -224,11 +224,16 @@
     const range = selection.getRangeAt(0);
 
     if (range.collapsed) {
-      const enable = !(highlightPending || selectionHasHighlight());
-      insertTypingIsland(enable ? highlightColor() : 'transparent');
-      highlightPending = enable;
+      const isOn = highlightPending || selectionHasHighlight();
       document.execCommand('styleWithCSS', false, 'true');
-      document.execCommand('hiliteColor', false, enable ? highlightColor() : 'transparent');
+      if (isOn) {
+        splitHighlightAtCaret();
+        document.execCommand('hiliteColor', false, 'transparent');
+        highlightPending = false;
+      } else {
+        document.execCommand('hiliteColor', false, highlightColor());
+        highlightPending = true;
+      }
       refreshFormat();
       return;
     }
@@ -250,17 +255,49 @@
     refreshFormat();
   }
 
-  /** Petit span sous le curseur qui porte la couleur de frappe (surlignée ou transparente). */
-  function insertTypingIsland(color: string): void {
+  /**
+   * Coupe le span surligné au curseur et place le curseur dans un nœud de texte neutre
+   * entre les deux morceaux : le texte tapé ensuite n'hérite plus du fond coloré.
+   */
+  function splitHighlightAtCaret(): void {
     const selection = document.getSelection();
     if (!selection || !selection.rangeCount) return;
     const range = selection.getRangeAt(0);
-    const span = document.createElement('span');
-    span.style.backgroundColor = color;
+    if (!range.collapsed) return;
+
+    let node: Node | null = range.startContainer;
+    let el: HTMLElement | null =
+      node?.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : (node?.parentElement ?? null);
+    let span: HTMLElement | null = null;
+    while (el && el !== bodyEl) {
+      const bg = el.style?.backgroundColor;
+      if (bg) {
+        if (bg !== 'transparent') span = el;
+        break;
+      }
+      el = el.parentElement;
+    }
+    if (!span || !span.parentNode) return;
+
+    const leftRange = range.cloneRange();
+    leftRange.selectNodeContents(span);
+    leftRange.setEnd(range.startContainer, range.startOffset);
+    const rightRange = range.cloneRange();
+    rightRange.selectNodeContents(span);
+    rightRange.setStart(range.startContainer, range.startOffset);
+
+    const left = span.cloneNode(false) as HTMLElement;
+    left.appendChild(leftRange.cloneContents());
+    const right = span.cloneNode(false) as HTMLElement;
+    right.appendChild(rightRange.extractContents());
+
+    const parent = span.parentNode;
+    parent.insertBefore(left, span);
     const marker = document.createTextNode('\u200b');
-    span.appendChild(marker);
-    range.deleteContents();
-    range.insertNode(span);
+    parent.insertBefore(marker, span);
+    parent.insertBefore(right, span);
+    parent.removeChild(span);
+
     const caret = document.createRange();
     caret.setStart(marker, 1);
     caret.collapse(true);
