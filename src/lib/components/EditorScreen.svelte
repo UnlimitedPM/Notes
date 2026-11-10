@@ -5,10 +5,17 @@
   import { notesStore } from '../notes.svelte';
   import { NOTE_COLORS } from '../colors';
   import { formatNoteDate, htmlToText } from '../format';
+  import { noteToMarkdown } from '../markdown';
+  import {
+    imageFilename,
+    markdownFilename,
+    renderNoteImage,
+    shareOrDownload
+  } from '../noteImage';
   import { toast } from '../toast.svelte';
   import type { Note, NoteColorKey } from '../types';
 
-  type SheetName = 'more' | 'color' | 'folder' | null;
+  type SheetName = 'more' | 'color' | 'folder' | 'share' | null;
 
   interface Props {
     note: Note;
@@ -827,17 +834,60 @@
     onclose();
   }
 
-  async function share() {
-    const text = `${title}\n\n${htmlToText(html)}`.trim();
+  function plainNoteText(): string {
+    return `${title}\n\n${htmlToText(html)}`.trim();
+  }
+
+  async function copyText(text: string) {
     try {
-      if (navigator.share) {
-        await navigator.share({ title: title || 'Note', text });
-      } else {
-        await navigator.clipboard.writeText(text);
-        toast.show('Note copiée');
-      }
+      await navigator.clipboard.writeText(text);
+      toast.show('Note copiée');
+    } catch {
+      toast.show('Copie impossible');
+    }
+  }
+
+  /** « Partager une note comme texte » */
+  async function shareAsText() {
+    sheet = null;
+    const text = plainNoteText();
+    try {
+      if (navigator.share) await navigator.share({ title: title || 'Note', text });
+      else await copyText(text);
     } catch {
       /* partage annulé */
+    }
+  }
+
+  /** « Partager une note en tant qu'image » */
+  async function shareAsImage() {
+    sheet = null;
+    toast.show('Création de l’image…');
+    try {
+      const blob = await renderNoteImage({
+        title,
+        meta,
+        html,
+        dark: document.documentElement.dataset.theme !== 'light'
+      });
+      const result = await shareOrDownload(blob, imageFilename(title), title || 'Note');
+      if (result === 'downloaded') toast.show('Image enregistrée');
+    } catch {
+      toast.show('Image impossible à créer');
+    }
+  }
+
+  /** « Exporter comme Markdown » */
+  async function exportMarkdown() {
+    sheet = null;
+    const markdown = noteToMarkdown(title, html);
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    try {
+      const result = await shareOrDownload(blob, markdownFilename(title), title || 'Note');
+      if (result === 'downloaded') toast.show('Markdown enregistré');
+    } catch (error) {
+      console.error('Export Markdown impossible', error);
+      await copyText(markdown);
     }
   }
 
@@ -884,7 +934,7 @@
       </div>
     {:else}
       <div class="bar-right">
-        <button class="icon-btn" onclick={share} aria-label="Partager">
+        <button class="icon-btn" onclick={() => (sheet = 'share')} aria-label="Partager">
           <Icon name="share" size={22} />
         </button>
         <button class="icon-btn" onclick={() => (sheet = 'color')} aria-label="Style de la note">
@@ -1033,9 +1083,29 @@
   <Sheet
     open={sheet !== null}
     onclose={() => (sheet = null)}
-    title={sheet === 'color' ? 'Couleur de la note' : sheet === 'folder' ? 'Dossier' : ''}
+    title={sheet === 'color'
+      ? 'Couleur de la note'
+      : sheet === 'folder'
+        ? 'Dossier'
+        : sheet === 'share'
+          ? 'Partager une note'
+          : ''}
   >
-    {#if sheet === 'more'}
+    {#if sheet === 'share'}
+      <button class="sheet-row" onclick={shareAsText}>
+        <Icon name="text" size={22} />
+        <span class="grow wrap">Partager une note comme texte</span>
+      </button>
+      <button class="sheet-row" onclick={shareAsImage}>
+        <Icon name="image" size={22} />
+        <span class="grow wrap">Partager une note en tant qu'image</span>
+      </button>
+      <button class="sheet-row" onclick={exportMarkdown}>
+        <Icon name="note" size={22} />
+        <span class="grow wrap">Exporter comme Markdown</span>
+      </button>
+      <button class="sheet-cancel" onclick={() => (sheet = null)}>Annuler</button>
+    {:else if sheet === 'more'}
       <button class="sheet-row" onclick={togglePin}>
         <Icon name={note.pinned ? 'pin-filled' : 'pin'} size={22} />
         <span class="grow">{note.pinned ? 'Désépingler' : 'Épingler'}</span>
