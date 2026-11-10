@@ -33,6 +33,7 @@
   let formatOpen = $state(false);
   let sheet = $state<SheetName>(null);
   let savedRange: Range | null = null;
+  let highlightPending = $state(false);
 
   let pending: Partial<Note> = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -74,7 +75,7 @@
   }
 
   function onBodyInput() {
-    html = bodyEl?.innerHTML ?? '';
+    html = (bodyEl?.innerHTML ?? '').replace(/\u200b/g, '');
     queue({ html });
     refreshFormat();
   }
@@ -85,6 +86,7 @@
 
   function stopEditing() {
     formatOpen = false;
+    highlightPending = false;
     flush();
     editing = false;
     (document.activeElement as HTMLElement | null)?.blur();
@@ -153,15 +155,19 @@
     if (!selection || !selection.rangeCount) return false;
 
     const range = selection.getRangeAt(0);
-    for (const node of highlightedNodes()) {
-      if (range.intersectsNode(node)) return true;
+    if (!range.collapsed) {
+      for (const node of highlightedNodes()) {
+        if (range.intersectsNode(node)) return true;
+      }
     }
 
     let node: Node | null = selection.anchorNode;
     let el: HTMLElement | null =
       node?.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : (node?.parentElement ?? null);
+    // Le style le plus proche décide : un span « transparent » coupe le surlignage.
     while (el && el !== bodyEl) {
-      if (el.style.backgroundColor && el.style.backgroundColor !== 'transparent') return true;
+      const bg = el.style?.backgroundColor;
+      if (bg) return bg !== 'transparent';
       el = el.parentElement;
     }
     return false;
@@ -177,7 +183,7 @@
       h1: tag === 'H1',
       h2: tag === 'H2',
       h3: tag === 'H3',
-      highlight: selectionHasHighlight()
+      highlight: highlightPending || selectionHasHighlight()
     };
   }
 
@@ -218,10 +224,14 @@
     const range = selection.getRangeAt(0);
 
     if (range.collapsed) {
-      toast.show('Sélectionnez du texte pour surligner');
+      const enable = !(highlightPending || selectionHasHighlight());
+      insertTypingIsland(enable ? highlightColor() : 'transparent');
+      highlightPending = enable;
+      document.execCommand('styleWithCSS', false, 'true');
+      document.execCommand('hiliteColor', false, enable ? highlightColor() : 'transparent');
+      refreshFormat();
       return;
     }
-
     if (selectionHasHighlight()) {
       for (const node of highlightedNodes()) {
         if (!range.intersectsNode(node)) continue;
@@ -236,10 +246,31 @@
     } else {
       exec('hiliteColor', highlightColor());
     }
+    highlightPending = false;
     refreshFormat();
   }
 
+  /** Petit span sous le curseur qui porte la couleur de frappe (surlignée ou transparente). */
+  function insertTypingIsland(color: string): void {
+    const selection = document.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    const span = document.createElement('span');
+    span.style.backgroundColor = color;
+    const marker = document.createTextNode('\u200b');
+    span.appendChild(marker);
+    range.deleteContents();
+    range.insertNode(span);
+    const caret = document.createRange();
+    caret.setStart(marker, 1);
+    caret.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(caret);
+    savedRange = caret.cloneRange();
+  }
+
   function clearFormat() {
+    highlightPending = false;
     exec('removeFormat');
     const block = blockElement();
     if (block && /^H[1-3]$/.test(block.tagName)) exec('formatBlock', 'DIV');
@@ -283,15 +314,34 @@
   function onBodyKeydown(event: KeyboardEvent) {
     if (event.key !== 'Enter' || event.shiftKey) return;
     const block = blockElement();
-    if (!block || !block.classList.contains('task-line')) return;
-    event.preventDefault();
-    const next = document.createElement('div');
-    next.className = 'task-line';
-    next.setAttribute('data-checked', 'false');
-    next.innerHTML = '<br>';
-    block.after(next);
-    placeCaretAtStart(next);
-    onBodyInput();
+
+    if (block && block.classList.contains('task-line')) {
+      event.preventDefault();
+      highlightPending = false;
+      document.execCommand('styleWithCSS', false, 'true');
+      document.execCommand('hiliteColor', false, 'transparent');
+      const next = document.createElement('div');
+      next.className = 'task-line';
+      next.setAttribute('data-checked', 'false');
+      next.innerHTML = '<br>';
+      block.after(next);
+      placeCaretAtStart(next);
+      onBodyInput();
+      return;
+    }
+
+    // Entrée désactive le surlignage en cours et repart sur une ligne normale.
+    if (highlightPending || selectionHasHighlight()) {
+      event.preventDefault();
+      const div = document.createElement('div');
+      div.innerHTML = '<br>';
+      block ? block.after(div) : bodyEl?.appendChild(div);
+      placeCaretAtStart(div);
+      highlightPending = false;
+      document.execCommand('styleWithCSS', false, 'true');
+      document.execCommand('hiliteColor', false, 'transparent');
+      onBodyInput();
+    }
   }
 
   function onBodyClick(event: MouseEvent) {

@@ -27,7 +27,8 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
   la note ; elle n'apparaît pas dans Tâches, et une tâche ne crée jamais de carte dans Notes.
   Les anciennes listes stockées comme notes sont migrées vers les tâches au premier lancement.
 - **Formatage réversible** : chaque bouton s'active en ambre et se désactive au second appui,
-  la sélection est préservée entre les appuis.
+  la sélection est préservée entre les appuis. Le surligneur agit aussi comme état de frappe :
+  appuyer, écrire (le texte est surligné), réappuyer ou faire Entrée (la suite redevient normale).
 - **Création rapide de tâche** : le + de l'onglet Tâches ouvre le panneau « Appuyez sur Entrée
   pour créer des sous-tâches » (rappel + Terminé) ; il ajoute des tâches, pas des notes.
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.
