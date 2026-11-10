@@ -1248,8 +1248,11 @@
       />
     </div>
   {/if}
+</div>
 
-  <Sheet
+<!-- Feuilles et plein-écran : hors de `.note`, sinon ils héritent de la palette
+     de la note (texte foncé sur une feuille sombre). -->
+<Sheet
     open={sheet !== null}
     onclose={() => (sheet = null)}
     title={sheet === 'color'
@@ -1367,7 +1370,6 @@
   {#if voiceOpen}
     <VoiceRecorder onclose={() => (voiceOpen = false)} ondone={onVoiceDone} />
   {/if}
-</div>
 
 <style>
   .note {
