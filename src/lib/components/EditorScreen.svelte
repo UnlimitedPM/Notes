@@ -941,6 +941,9 @@
       if (target.closest('.media-menu')) return;
       const media = target.closest('img, audio');
       if (media && bodyEl.contains(media)) {
+        // on ne laisse pas le texte prendre le focus : sinon la note passe en
+        // édition et la barre d'actions disparaît aussitôt.
+        if (!editing) event.preventDefault();
         selectMedia(media as HTMLElement);
         return;
       }
@@ -1792,7 +1795,9 @@
 
   .media-menu {
     position: fixed;
-    z-index: 60;
+    /* sous le voile et la feuille du bas (40/41) : la barre s'efface quand une
+       feuille s'ouvre, mais la sélection reste pour agir dessus. */
+    z-index: 35;
     display: flex;
     align-items: center;
     gap: 2px;
