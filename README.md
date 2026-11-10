@@ -10,7 +10,7 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 | Écran | Détails |
 | --- | --- |
 | **Notes** | Recherche, chips de catégories, grille 2 colonnes, vignettes d'images, dates « 12:12 / Hier 18:51 / 6 Novembre » |
-| **Tâches** | Liste de tâches autonome (séparée des notes), édition sur place, ajout rapide par panneau |
+| **Tâches** | Liste de tâches autonome (séparée des notes), recherche, édition sur place, ajout rapide par panneau |
 | **Note** | Lecture puis édition au toucher : annuler / rétablir / valider, texte + cases mélangés |
 | **Format** | Barre défilante (ordre du téléphone) : Surligner · H1 · H2 · H3 · Gras · Italique · Barré · Puces · Numérotation · Effacer, avec états actifs |
 | **Sélection** | Appui long : sélection multiple, Tout sélectionner, Masquer / Épingler / Déplacer / Supprimer |

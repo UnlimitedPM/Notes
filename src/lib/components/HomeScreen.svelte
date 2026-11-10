@@ -22,6 +22,7 @@
   let { tab, ontab, onopen, onnew, onsettings, onfolders }: Props = $props();
 
   let query = $state('');
+  let taskQuery = $state('');
   let moveOpen = $state(false);
   let showCompleted = $state(false);
 
@@ -35,7 +36,13 @@
   const notes = $derived(notesStore.search(query));
   const columns = $derived(splitColumns(notes));
   const tasks = $derived(notesStore.allTasks);
-  const completedCount = $derived(tasks.filter((t) => t.done).length);
+  const taskSearch = $derived(taskQuery.trim().toLowerCase());
+  const foundTasks = $derived(
+    taskSearch ? tasks.filter((t) => t.text.toLowerCase().includes(taskSearch)) : tasks
+  );
+  const openTasks = $derived(foundTasks.filter((t) => !t.done));
+  const doneTasks = $derived(foundTasks.filter((t) => t.done));
+  const completedCount = $derived(doneTasks.length);
   const selectedCount = $derived(selectedIds.length);
 
   const selectionTitle = $derived(
@@ -240,15 +247,32 @@
         </div>
       {/if}
     {:else}
-      {#if tasks.length}
+      <div class="searchbar">
+        <Icon name="search" size={20} class="search-icon" />
+        <input
+          bind:value={taskQuery}
+          class="search-input"
+          type="search"
+          placeholder="Rechercher des tâches"
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        {#if taskQuery}
+          <button class="search-clear" onclick={() => (taskQuery = '')} aria-label="Effacer">
+            <Icon name="close" size={16} />
+          </button>
+        {/if}
+      </div>
+
+      {#if openTasks.length || doneTasks.length}
         <div class="tasks">
-          {#each tasks.filter((t) => !t.done) as task (task.id)}
+          {#each openTasks as task (task.id)}
             <TaskCard {task} />
           {/each}
 
           {#if completedCount}
             {#if showCompleted}
-              {#each tasks.filter((t) => t.done) as task (task.id)}
+              {#each doneTasks as task (task.id)}
                 <TaskCard {task} />
               {/each}
             {/if}
@@ -262,10 +286,14 @@
       {:else if notesStore.ready}
         <div class="empty">
           <div class="empty-art">
-            <Icon name="check-square" size={40} stroke={1.5} />
+            <Icon name={taskSearch ? 'search' : 'check-square'} size={taskSearch ? 38 : 40} stroke={1.5} />
           </div>
-          <p class="empty-title">Aucune tâche</p>
-          <p class="empty-sub">Appuyez sur + pour ajouter une tâche. Les tâches et les notes sont séparées.</p>
+          <p class="empty-title">{taskSearch ? 'Aucun résultat' : 'Aucune tâche'}</p>
+          <p class="empty-sub">
+            {taskSearch
+              ? 'Essayez un autre mot-clé'
+              : 'Appuyez sur + pour ajouter une tâche. Les tâches et les notes sont séparées.'}
+          </p>
         </div>
       {/if}
     {/if}
@@ -296,7 +324,7 @@
       onclick={tab === 'tasks' ? openComposer : onnew}
       aria-label={tab === 'tasks' ? 'Nouvelle tâche' : 'Nouvelle note'}
     >
-      <Icon name="plus" size={28} stroke={1.9} />
+      <Icon name="plus" size={22} stroke={2} />
     </button>
     <TabBar {tab} {ontab} />
   {/if}
@@ -508,11 +536,11 @@
 
   .fab {
     position: absolute;
-    right: 35px;
-    bottom: calc(70px + var(--safe-bottom) + 2px);
+    right: 30px;
+    bottom: calc(70px + 18px + var(--safe-bottom));
     z-index: 20;
-    width: 58px;
-    height: 58px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
