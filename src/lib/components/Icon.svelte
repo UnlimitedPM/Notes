@@ -16,6 +16,10 @@ const ICONS: Record<string, string> = {
   copy: '<rect x="8.4" y="8.4" width="11.6" height="11.6" rx="2.2"/><path d="M15.6 8.4V6.2c0-1-.8-1.8-1.8-1.8H5.8C4.8 4.4 4 5.2 4 6.2v8c0 1 .8 1.8 1.8 1.8h2.6"/>',
   info: '<circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.4M12 7.8h.01"/>',
   note: '<rect x="5.2" y="3.4" width="13.6" height="17.2" rx="2.6"/><path d="M8.6 8h6.8M8.6 12h6.8M8.6 16h4"/>',
+  'note-filled':
+    '<rect x="4.8" y="2.8" width="14.4" height="18.4" rx="3.2" fill="currentColor" stroke="none"/><path d="M8.4 8.2h7.2M8.4 12h7.2M8.4 16h4.4" stroke="var(--bg)" stroke-width="1.6"/>',
+  'check-square-filled':
+    '<rect x="3.4" y="3.4" width="17.2" height="17.2" rx="4.6" fill="currentColor" stroke="none"/><path d="M7.8 12.2l2.9 2.9 5.5-6" stroke="var(--bg)" stroke-width="2.1"/>',
   search: '<circle cx="11" cy="11" r="6.6"/><path d="M16.1 16.1 20.5 20.5"/>',
   folder:
     '<path d="M3.6 7.2c0-1 .8-1.8 1.8-1.8h3.3l2 2.2h7.9c1 0 1.8.8 1.8 1.8v8.8c0 1-.8 1.8-1.8 1.8H5.4c-1 0-1.8-.8-1.8-1.8V7.2Z"/>',

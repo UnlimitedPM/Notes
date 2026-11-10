@@ -79,19 +79,20 @@
   .task-card {
     display: flex;
     align-items: flex-start;
-    gap: 14px;
+    gap: 18px;
     width: 100%;
-    padding: 18px;
-    border-radius: 18px;
+    padding: 17px 18px;
+    border-radius: 16px;
     background: var(--card-bg, var(--surface-2));
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
 
   .task-check {
     flex: 0 0 auto;
-    width: 26px;
-    height: 26px;
-    margin-top: 1px;
+    width: 24px;
+    height: 24px;
+    margin-left: 12px;
+    margin-top: 2px;
     border-radius: 7px;
     border: 2px solid var(--text-3);
     display: grid;

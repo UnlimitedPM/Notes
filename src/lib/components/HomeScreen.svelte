@@ -28,11 +28,13 @@
   let addingFolder = $state(false);
   let folderName = $state('');
   let folderInput = $state<HTMLInputElement | null>(null);
+  let query = $state('');
+  let searchInput = $state<HTMLInputElement | null>(null);
 
   const selected = $derived(
     selectedId ? (notesStore.notes.find((n) => n.id === selectedId) ?? null) : null
   );
-  const notes = $derived(notesStore.visibleNotes);
+  const notes = $derived(notesStore.search(query));
   const columns = $derived(splitColumns(notes));
   const tasks = $derived(notesStore.tasks);
   const completedCount = $derived(tasks.filter((t) => t.done).length);
@@ -102,7 +104,7 @@
   }
 
   function selectFolder(folderId: string | null) {
-    notesStore.activeFolderId = folderId;
+    notesStore.activeCategory = folderId ?? 'all';
     sheet = null;
   }
 
@@ -116,7 +118,7 @@
     const folder = notesStore.createFolder(folderName);
     folderName = '';
     addingFolder = false;
-    if (folder) notesStore.activeFolderId = folder.id;
+    if (folder) notesStore.activeCategory = folder.id;
     sheet = null;
   }
 
@@ -150,15 +152,39 @@
     </div>
 
     <h1 class="screen-title">
-      {tab === 'tasks' ? 'Tâches' : notesStore.activeFolder?.name || 'Notes'}
+      {tab === 'tasks' ? 'Tâches' : 'Notes'}
     </h1>
 
     {#if tab === 'notes'}
-      {#if notesStore.activeFolder}
-        <button class="clear-folder" onclick={() => (notesStore.activeFolderId = null)}>
-          Toutes les notes
-        </button>
-      {/if}
+      <div class="searchbar">
+        <Icon name="search" size={20} class="search-icon" />
+        <input
+          bind:this={searchInput}
+          bind:value={query}
+          class="search-input"
+          type="search"
+          placeholder="Rechercher des notes"
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        {#if query}
+          <button class="search-clear" onclick={() => (query = '')} aria-label="Effacer">
+            <Icon name="close" size={16} />
+          </button>
+        {/if}
+      </div>
+
+      <div class="chips">
+        {#each notesStore.categories as category (category.key)}
+          <button
+            class="chip"
+            class:active={notesStore.activeCategory === category.key}
+            onclick={() => (notesStore.activeCategory = category.key)}
+          >
+            {category.label}
+          </button>
+        {/each}
+      </div>
 
       {#if notes.length}
         {#if notesStore.layout === 'grid'}
@@ -181,8 +207,10 @@
       {:else if notesStore.ready}
         <div class="empty">
           <div class="empty-art"><Icon name="note" size={42} stroke={1.5} /></div>
-          <p class="empty-title">Aucune note</p>
-          <p class="empty-sub">Appuyez sur + pour écrire votre première note</p>
+          <p class="empty-title">{query ? 'Aucun résultat' : 'Aucune note'}</p>
+          <p class="empty-sub">
+            {query ? 'Essayez un autre mot-clé' : 'Appuyez sur + pour écrire votre première note'}
+          </p>
         </div>
       {/if}
     {:else}
@@ -271,7 +299,7 @@
         <Icon name="note" size={22} />
         <span class="grow">Toutes les notes</span>
         <span class="muted">{notesStore.countFolder(null)}</span>
-        {#if !notesStore.activeFolderId}<Icon name="check" size={18} class="check" />{/if}
+        {#if notesStore.activeCategory === 'all'}<Icon name="check" size={18} class="check" />{/if}
       </button>
       {#each notesStore.folders as folder (folder.id)}
         <div class="folder-line">
@@ -279,7 +307,7 @@
             <Icon name="folder" size={22} />
             <span class="grow">{folder.name}</span>
             <span class="muted">{notesStore.countFolder(folder.id)}</span>
-            {#if notesStore.activeFolderId === folder.id}
+            {#if notesStore.activeCategory === folder.id}
               <Icon name="check" size={18} class="check" />
             {/if}
           </button>
@@ -352,26 +380,101 @@
     display: flex;
     justify-content: flex-end;
     gap: 2px;
-    padding: calc(var(--safe-top) + 6px) 14px 0;
+    padding: calc(var(--safe-top) + 6px) 18px 0;
     color: var(--text);
   }
 
-  .screen-title {
-    padding-top: 24px;
+  .top-icons :global(.icon-btn) {
+    width: 40px;
+    height: 40px;
   }
 
-  .clear-folder {
-    display: block;
-    margin: 14px 18px -2px;
-    font-size: 13.5px;
+  .screen-title {
+    padding-top: 14px;
+  }
+
+  .searchbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 44px;
+    margin: 14px 24px 0;
+    padding: 0 16px;
+    border-radius: 22px;
+    background: var(--surface);
+  }
+
+  :global(.search-icon) {
     color: var(--text-3);
+    flex: 0 0 auto;
+  }
+
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    outline: none;
+    font-size: 17px;
+    color: var(--text);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-3);
+  }
+
+  .search-input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .search-clear {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--surface-3);
+    color: var(--text-2);
+  }
+
+  .chips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 0 26px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chip {
+    flex: 0 0 auto;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 18px;
+    font-size: 15.5px;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+
+  .chip.active {
+    background: var(--surface-2);
+    color: var(--text);
+    font-weight: 600;
   }
 
   .grid {
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    padding: 22px 18px 0;
+    padding: 14px 18px 0;
   }
 
   .col {
@@ -386,11 +489,11 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 22px 16px 0;
+    padding: 14px 18px 0;
   }
 
   .tasks {
-    padding: 22px 18px 0;
+    padding: 22px 20px 0;
   }
 
   .show-completed {
@@ -407,11 +510,11 @@
 
   .fab {
     position: absolute;
-    right: 20px;
-    bottom: calc(64px + var(--safe-bottom) + 20px);
+    right: 35px;
+    bottom: calc(70px + var(--safe-bottom) + 2px);
     z-index: 20;
-    width: 61px;
-    height: 61px;
+    width: 58px;
+    height: 58px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;

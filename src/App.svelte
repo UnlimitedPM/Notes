@@ -81,7 +81,7 @@
 
   function switchTab(tab: 'notes' | 'tasks') {
     homeTab = tab;
-    notesStore.activeFolderId = null;
+    notesStore.activeCategory = 'all';
   }
 </script>
 

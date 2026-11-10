@@ -16,7 +16,7 @@
     onclick={() => ontab('notes')}
     aria-current={tab === 'notes' ? 'page' : undefined}
   >
-    <Icon name="note" size={27} stroke={tab === 'notes' ? 2.1 : 1.6} />
+    <Icon name="note-filled" size={22} />
     <span>Notes</span>
   </button>
   <button
@@ -25,7 +25,7 @@
     onclick={() => ontab('tasks')}
     aria-current={tab === 'tasks' ? 'page' : undefined}
   >
-    <Icon name="check-square" size={27} stroke={tab === 'tasks' ? 2.1 : 1.6} />
+    <Icon name="check-square-filled" size={22} />
     <span>Tâches</span>
   </button>
 </nav>
@@ -38,7 +38,7 @@
     bottom: 0;
     z-index: 15;
     display: flex;
-    height: calc(64px + var(--safe-bottom));
+    height: calc(70px + var(--safe-bottom));
     padding-bottom: var(--safe-bottom);
     background: var(--bg);
   }
@@ -51,7 +51,7 @@
     justify-content: center;
     gap: 4px;
     color: var(--text-3);
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 500;
     transition: color 0.15s ease;
   }

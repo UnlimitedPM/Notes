@@ -373,31 +373,31 @@
 <div class="note" data-note-color={note.color}>
   <header class="note-bar">
     <button class="icon-btn" onclick={goBack} aria-label="Retour">
-      <Icon name="back" size={25} />
+      <Icon name="back" size={22} />
     </button>
 
     {#if editing}
       <div class="bar-right">
         <button class="icon-btn" onclick={undo} aria-label="Annuler">
-          <Icon name="undo" size={23} />
+          <Icon name="undo" size={21} />
         </button>
         <button class="icon-btn" onclick={redo} aria-label="Rétablir">
-          <Icon name="redo" size={23} />
+          <Icon name="redo" size={21} />
         </button>
         <button class="icon-btn" onclick={stopEditing} aria-label="Terminer l'édition">
-          <Icon name="check" size={25} stroke={2.1} />
+          <Icon name="check" size={22} stroke={2.1} />
         </button>
       </div>
     {:else}
       <div class="bar-right">
         <button class="icon-btn" onclick={share} aria-label="Partager">
-          <Icon name="share" size={24} />
+          <Icon name="share" size={22} />
         </button>
         <button class="icon-btn" onclick={() => (sheet = 'color')} aria-label="Style de la note">
-          <Icon name="tshirt" size={24} />
+          <Icon name="tshirt" size={22} />
         </button>
         <button class="icon-btn" onclick={() => (sheet = 'more')} aria-label="Plus d'options">
-          <Icon name="more" size={23} />
+          <Icon name="more" size={22} />
         </button>
       </div>
     {/if}
@@ -650,13 +650,13 @@
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 6px 18px 40px;
+    padding: 0 22px 40px;
   }
 
   .note-title {
     display: block;
     width: 100%;
-    margin: 22px 0 0;
+    margin: 6px 0 0;
     padding: 0;
     border: 0;
     background: transparent;
@@ -675,8 +675,8 @@
   .note-meta {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 10px;
+    gap: 12px;
+    margin-top: 12px;
     font-size: 14px;
     color: var(--text-3);
   }
@@ -686,11 +686,11 @@
   }
 
   .note-body {
-    margin-top: 24px;
+    margin-top: 22px;
     min-height: 40vh;
     outline: none;
     font-size: var(--note-text);
-    line-height: 1.8;
+    line-height: 1.62;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
   }

@@ -24,10 +24,22 @@ function time(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-/** « 6 Novembre » (ou « 6 Novembre 2024 » si autre année). */
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getDate() === b.getDate() &&
+    a.getMonth() === b.getMonth() &&
+    a.getFullYear() === b.getFullYear()
+  );
+}
+
+/** « 12:12 » aujourd'hui, « Hier 18:51 », sinon « 6 Novembre ». */
 export function formatCardDate(ts: number): string {
   const d = new Date(ts);
   const now = new Date();
+  if (sameDay(d, now)) return time(ts);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, yesterday)) return `Hier ${time(ts)}`;
   const month = capitalize(MONTHS[d.getMonth()]);
   if (d.getFullYear() !== now.getFullYear()) {
     return `${d.getDate()} ${month} ${d.getFullYear()}`;

@@ -168,7 +168,8 @@ class NotesStore {
   notes = $state<Note[]>([]);
   ready = $state(false);
   folders = $state<Folder[]>(readFolders());
-  activeFolderId = $state<string | null>(null);
+  /** 'all' | 'none' (sans catégorie) | id de dossier */
+  activeCategory = $state<string>('all');
 
   sort = $state<SortKey>(readString('notes:sort', ['updated', 'created', 'title'], 'updated'));
   theme = $state<ThemeKey>(readString('notes:theme', ['system', 'light', 'dark'], 'system'));
@@ -199,11 +200,23 @@ class NotesStore {
 
   get visibleNotes(): Note[] {
     const list = this.sorted;
-    return this.activeFolderId ? list.filter((n) => n.folderId === this.activeFolderId) : list;
+    if (this.activeCategory === 'all') return list;
+    if (this.activeCategory === 'none') return list.filter((n) => !n.folderId);
+    return list.filter((n) => n.folderId === this.activeCategory);
   }
 
-  get activeFolder(): Folder | null {
-    return this.folders.find((f) => f.id === this.activeFolderId) ?? null;
+  /** Chips de catégories : Tous, dossiers, Sans catégorie. */
+  get categories(): { key: string; label: string; count: number }[] {
+    const list = this.active;
+    return [
+      { key: 'all', label: 'Tous', count: list.length },
+      ...this.folders.map((f) => ({
+        key: f.id,
+        label: f.name,
+        count: list.filter((n) => n.folderId === f.id).length
+      })),
+      { key: 'none', label: 'Sans catégorie', count: list.filter((n) => !n.folderId).length }
+    ];
   }
 
   /** Toutes les tâches (cases à cocher) de toutes les listes, non terminées d'abord. */
@@ -289,7 +302,10 @@ class NotesStore {
       items: kind === 'checklist' ? [{ id: uid(), text: '', done: false }] : [],
       color: 'default',
       pinned: false,
-      folderId: this.activeFolderId,
+      folderId:
+        this.activeCategory !== 'all' && this.activeCategory !== 'none'
+          ? this.activeCategory
+          : null,
       tags: [],
       createdAt: now,
       updatedAt: now,
@@ -426,7 +442,7 @@ class NotesStore {
   deleteFolder(id: string): void {
     this.folders = this.folders.filter((f) => f.id !== id);
     write('notes:folders', JSON.stringify(this.folders));
-    if (this.activeFolderId === id) this.activeFolderId = null;
+    if (this.activeCategory === id) this.activeCategory = 'all';
     for (const note of this.notes.filter((n) => n.folderId === id)) {
       void this.update(note.id, { folderId: null });
     }

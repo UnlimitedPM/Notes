@@ -13,6 +13,7 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
   let longPressed = false;
 
+  const image = $derived(note.html.match(/<img[^>]+src="([^"]+)"/i)?.[1] ?? null);
   const preview = $derived(
     note.kind === 'checklist'
       ? note.items
@@ -60,11 +61,18 @@
   oncontextmenu={handleContext}
   onclick={handleClick}
 >
-  {#if note.title}
-    <h3 class="card-title">{note.title}</h3>
+  {#if image}
+    <span class="thumb"><img src={image} alt="" /></span>
   {/if}
-  <p class="card-text">{preview || 'Pas de texte'}</p>
-  <span class="card-date">{formatCardDate(note.updatedAt)}</span>
+  <span class="content">
+    {#if note.title}
+      <h3 class="card-title">{note.title}</h3>
+    {/if}
+    {#if !image}
+      <p class="card-text">{preview || 'Pas de texte'}</p>
+    {/if}
+    <span class="card-date">{formatCardDate(note.updatedAt)}</span>
+  </span>
 </button>
 
 <style>
@@ -72,12 +80,13 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    min-height: 118px;
-    padding: 16px;
+    min-height: 145px;
+    padding: 0;
     text-align: left;
-    border-radius: 18px;
+    border-radius: 16px;
     background: var(--card-bg, var(--surface-2));
     color: var(--text);
+    overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
@@ -88,11 +97,32 @@
     transform: scale(0.985);
   }
 
+  .thumb {
+    display: block;
+    width: 100%;
+    background: #f5f5f5;
+  }
+
+  .thumb img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+
+  .content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    padding: 15px;
+  }
+
   .card-title {
     margin: 0;
     font-size: var(--card-title);
     font-weight: 700;
-    line-height: 1.32;
+    line-height: 1.3;
     letter-spacing: -0.1px;
     display: -webkit-box;
     -webkit-line-clamp: 3;
@@ -103,9 +133,9 @@
   }
 
   .card-text {
-    margin: 10px 0 0;
+    margin: 12px 0 0;
     font-size: var(--card-text);
-    line-height: 1.5;
+    line-height: 1.6;
     color: var(--text-2);
     white-space: pre-line;
     overflow-wrap: anywhere;
@@ -119,7 +149,7 @@
   .card-date {
     display: block;
     margin-top: auto;
-    padding-top: 12px;
+    padding-top: 14px;
     font-size: 13px;
     line-height: 1.2;
     color: var(--text-3);

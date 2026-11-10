@@ -24,9 +24,9 @@
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --card-title: 17px;
-  --card-text: 14.5px;
-  --note-title: 32px;
-  --note-text: 19px;
+  --card-text: 15px;
+  --note-title: 34px;
+  --note-text: 20px;
 
   color-scheme: light;
 }
@@ -47,16 +47,16 @@
 
 [data-text-size='small'] {
   --card-title: 16px;
-  --card-text: 13.5px;
-  --note-title: 29px;
-  --note-text: 17px;
+  --card-text: 14px;
+  --note-title: 31px;
+  --note-text: 18px;
 }
 
 [data-text-size='large'] {
   --card-title: 18px;
-  --card-text: 15.5px;
-  --note-title: 35px;
-  --note-text: 21px;
+  --card-text: 16px;
+  --note-title: 37px;
+  --note-text: 22px;
 }
 
 /* ============================================================
@@ -96,7 +96,7 @@
 }
 
 [data-theme='dark'] [data-note-color='default'] {
-  --card-bg: #1c1c1e;
+  --card-bg: #1e1e1e;
   --note-bg: #000000;
 }
 [data-theme='dark'] [data-note-color='yellow'] {
@@ -236,7 +236,7 @@ textarea,
 
 .screen-title {
   margin: 0;
-  padding: 0 18px;
+  padding: 0 26px;
   font-size: 38px;
   font-weight: 300;
   letter-spacing: -0.8px;
