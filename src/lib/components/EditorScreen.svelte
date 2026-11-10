@@ -148,6 +148,16 @@
     formatAtEnd = el.scrollWidth - (el.scrollLeft + el.clientWidth) < 8;
   }
 
+  /** Molette de la souris -> défilement horizontal de la barre (desktop). */
+  function onFormatWheel(event: WheelEvent) {
+    const el = formatScrollEl;
+    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    el.scrollLeft += event.deltaY;
+    event.preventDefault();
+    syncFormatScroll();
+  }
+
   function blockElement(): HTMLElement | null {
     if (!bodyEl) return null;
     const selection = document.getSelection();
@@ -454,25 +464,13 @@
     run: () => void;
   };
 
-  // Ordre : les listes (puces / numéros) d'abord, puis les styles de texte.
+  // Même ordre que la barre du téléphone (surligneur, H1-H3, gras, italique) puis les ajouts.
   const formatTools = $derived<FormatTool[]>([
     {
       label: 'Surligner',
       icon: 'highlighter',
       active: () => format.highlight,
       run: toggleHighlight
-    },
-    {
-      label: 'Liste à puces',
-      icon: 'list-bullet',
-      active: () => format.ul,
-      run: () => toggleList('ul')
-    },
-    {
-      label: 'Liste numérotée',
-      icon: 'list-number',
-      active: () => format.ol,
-      run: () => toggleList('ol')
     },
     {
       label: 'Titre 1',
@@ -515,6 +513,18 @@
       glyphClass: 'glyph strike',
       active: () => format.strike,
       run: toggleStrike
+    },
+    {
+      label: 'Liste à puces',
+      icon: 'list-bullet',
+      active: () => format.ul,
+      run: () => toggleList('ul')
+    },
+    {
+      label: 'Liste numérotée',
+      icon: 'list-number',
+      active: () => format.ol,
+      run: () => toggleList('ol')
     },
     {
       label: 'Effacer la mise en forme',
@@ -926,7 +936,12 @@
       {#if formatOpen}
         <div class="format-bar">
           <div class="format-scroll-wrap" class:at-end={formatAtEnd}>
-            <div class="format-scroll" bind:this={formatScrollEl} onscroll={syncFormatScroll}>
+            <div
+              class="format-scroll"
+              bind:this={formatScrollEl}
+              onscroll={syncFormatScroll}
+              onwheel={onFormatWheel}
+            >
               {#each formatTools as tool (tool.label)}
                 <button
                   class="fmt-tool"
@@ -1274,7 +1289,10 @@
     gap: 2px;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: none;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-3) transparent;
+    overscroll-behavior-x: contain;
   }
 
   .format-scroll-wrap {
@@ -1301,13 +1319,22 @@
   }
 
   .format-scroll::-webkit-scrollbar {
-    display: none;
+    height: 5px;
+  }
+
+  .format-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .format-scroll::-webkit-scrollbar-thumb {
+    background: var(--text-3);
+    border-radius: 3px;
   }
 
   .fmt-tool {
     flex: 0 0 auto;
-    width: 40px;
-    height: 48px;
+    width: 36px;
+    height: 46px;
     display: grid;
     place-items: center;
     border-radius: 10px;
