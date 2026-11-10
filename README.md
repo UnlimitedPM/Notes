@@ -38,6 +38,8 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 - **Sélection multiple** : appui long sur une carte, pastilles de sélection, actions en bas.
 - **Croquis** : canevas avec 6 couleurs, gomme et 3 épaisseurs, inséré comme image dans la note.
 - **Note vocale** : enregistrement via `MediaRecorder`, lecteur audio intégré à la note.
+- **Médias supprimables** : un appui sur une image ou un audio le sélectionne et fait
+  apparaître une poubelle ; `Retour arrière` / `Suppr` le retire aussi.
 - **Rappel** : 1 h / ce soir / demain / date libre ; cloche + heure sur la carte. Il sonne tant que
   l'app est ouverte (les rappels garantis app fermée viendront avec le serveur et le push).
 - **Partage** : texte, image PNG de la note, ou export Markdown (`.md`).
@@ -50,12 +52,31 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 ```bash
 npm install
 npm run dev        # http://localhost:5173 (exposé sur le réseau local)
-npm run check
+npm run check      # types + lint Svelte
+npm test           # 59 tests (vitest + jsdom + fake-indexeddb)
 npm run build
 npm run preview
 ```
 
 `dist/` est statique. L'installation PWA exige HTTPS (sauf localhost).
+
+## Tests
+
+```
+tests/
+  fixtures.ts            réexporte la base de test de src/lib/testFixtures.ts
+  setup.ts               fake-indexeddb (IndexedDB en mémoire)
+  markdown.test.ts       conversion HTML → Markdown
+  tasks.test.ts          lecture / coche / édition des lignes de cases
+  format-media.test.ts   dates, texte brut, suppression des images et audios
+  store.test.ts          base de test : import, corbeille, tri, rappels, dossiers
+```
+
+La **base de test** (`src/lib/testFixtures.ts`) contient une note avec un exemplaire de
+tout (titres, gras/italique/barré/surligné, puces, numéros, cases, image, audio, rappel),
+une note épinglée, une masquée, une à la corbeille et une vide, plus 2 dossiers et 2 tâches.
+Elle sert aux tests **et** au bouton « Charger la base de test » des Réglages (visible en
+développement uniquement).
 
 ## iPhone
 

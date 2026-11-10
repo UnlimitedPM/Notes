@@ -638,6 +638,11 @@ class NotesStore {  notes = $state<Note[]>([]);
     await deleteAllNotes();
   }
 
+  /** Permet de relancer `init()` (rechargement, tests). */
+  resetStarted(): void {
+    this.started = false;
+  }
+
   setSort(sort: SortKey): void {
     this.sort = sort;
     write('notes:sort', sort);

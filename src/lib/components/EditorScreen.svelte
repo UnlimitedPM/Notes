@@ -8,6 +8,7 @@
   import { NOTE_COLORS } from '../colors';
   import { formatNoteDate, htmlToText } from '../format';
   import { noteToMarkdown } from '../markdown';
+  import { findMedia, removeMedia } from '../media';
   import {
     imageFilename,
     markdownFilename,
@@ -110,6 +111,7 @@
   function stopEditing() {
     formatOpen = false;
     highlightPending = false;
+    clearMediaSelection();
     flush();
     editing = false;
     (document.activeElement as HTMLElement | null)?.blur();
@@ -714,6 +716,11 @@
   }
 
   function onBodyKeydown(event: KeyboardEvent) {
+    if (selectedMedia && (event.key === 'Backspace' || event.key === 'Delete')) {
+      event.preventDefault();
+      removeSelectedMedia();
+      return;
+    }
     if (event.key !== 'Enter' || event.shiftKey) return;
 
     // Entrée sur une puce vide : on sort de la liste (ligne normale).
@@ -763,6 +770,16 @@
 
   function onBodyClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
+
+    // Image ou audio : on le sélectionne pour proposer la suppression.
+    const media = findMedia(event.target);
+    if (media && editing && bodyEl?.contains(media)) {
+      selectMedia(media);
+      if (formatOpen) formatOpen = false;
+      return;
+    }
+    if (selectedMedia) clearMediaSelection();
+
     const line = target.closest('.task-line') as HTMLElement | null;
     if (!line) {
       if (formatOpen) formatOpen = false;
@@ -777,6 +794,45 @@
       );
       onBodyInput();
     }
+  }
+
+  // ---- Suppression d'un média (image / audio) -----------------------------
+  let selectedMedia = $state<HTMLElement | null>(null);
+  let mediaBox = $state<{ top: number; left: number } | null>(null);
+
+  function mediaOffsets(media: HTMLElement): { top: number; left: number } {
+    const doc = media.offsetParent as HTMLElement | null;
+    const mediaRect = media.getBoundingClientRect();
+    const parentRect = doc?.getBoundingClientRect() ?? bodyEl?.getBoundingClientRect();
+    const baseTop = parentRect?.top ?? 0;
+    const baseLeft = parentRect?.left ?? 0;
+    return {
+      top: mediaRect.top - baseTop,
+      left: mediaRect.left - baseLeft + mediaRect.width
+    };
+  }
+
+  function selectMedia(media: HTMLElement) {
+    selectedMedia = media;
+    mediaBox = mediaOffsets(media);
+  }
+
+  function clearMediaSelection() {
+    selectedMedia = null;
+    mediaBox = null;
+  }
+
+  function syncMediaBox() {
+    if (selectedMedia && selectedMedia.isConnected) mediaBox = mediaOffsets(selectedMedia);
+  }
+
+  function removeSelectedMedia() {
+    const media = selectedMedia;
+    if (!media) return;
+    removeMedia(media);
+    clearMediaSelection();
+    onBodyInput();
+    toast.show('Média supprimé');
   }
 
   function pickImage() {
@@ -1070,6 +1126,17 @@
       onkeydown={onBodyKeydown}
       onclick={onBodyClick}
     ></div>
+
+    {#if selectedMedia && mediaBox && editing}
+      <button
+        class="media-del"
+        style="top:{Math.max(4, mediaBox.top - 14)}px;left:{Math.max(4, mediaBox.left - 24)}px"
+        onclick={removeSelectedMedia}
+        aria-label="Supprimer le média"
+      >
+        <Icon name="trash" size={15} />
+      </button>
+    {/if}
   </div>
 
   {#if editing}
@@ -1298,6 +1365,7 @@
   }
 
   .doc {
+    position: relative;
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1368,6 +1436,19 @@
     display: block;
     width: 100%;
     margin: 12px 0;
+  }
+
+  .media-del {
+    position: absolute;
+    z-index: 5;
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--danger);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   }
 
   .note-body :global(h1) {

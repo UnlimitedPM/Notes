@@ -37,6 +37,7 @@ function inlineMarkdown(node: Node): string {
 
   if (tag === 'STRONG' || tag === 'B') return wrap('**', inner);
   if (tag === 'EM' || tag === 'I') return wrap('*', inner);
+  if (tag === 'U') return inner.trim() ? `<u>${inner}</u>` : inner;
   if (tag === 'CODE') return inner ? `\`${inner}\`` : inner;
 
   let out = inner;

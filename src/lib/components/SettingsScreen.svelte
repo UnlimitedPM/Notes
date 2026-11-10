@@ -2,9 +2,11 @@
   import Icon from './Icon.svelte';
   import Sheet from './Sheet.svelte';
   import { notesStore } from '../notes.svelte';
+  import { confirmStore } from '../confirm.svelte';
   import type { LayoutKey, SortKey, TextSizeKey, ThemeKey } from '../types';
   import { toast } from '../toast.svelte';
   import pkg from '../../../package.json';
+  import { TEST_PAYLOAD } from '../testFixtures';
 
   type SheetName =
     | 'size'
@@ -26,8 +28,9 @@
   let sheet = $state<SheetName>(null);
   let scrolled = $state(false);
   let fileInput = $state<HTMLInputElement | null>(null);
+  const devMode = import.meta.env.DEV;
 
-  // Version lue dans package.json (source unique de vérité).
+  // Injectée par vite.config.ts (`define`) depuis package.json.
   const appVersion = pkg.version;
 
   const sizeLabels: Record<TextSizeKey, string> = {
@@ -72,6 +75,20 @@
     link.click();
     URL.revokeObjectURL(url);
     toast.show('Export JSON téléchargé');
+  }
+
+  async function loadTestDatabase() {
+    const ok = await confirmStore.ask(
+      'Base de test',
+      'Remplacer vos données par la base de test (notes, dossiers, tâches) ?',
+      'Charger'
+    );
+    if (!ok) return;
+    await notesStore.purgeEverything();
+    notesStore.folders = [];
+    notesStore.taskList = [];
+    const result = await notesStore.importPayload(TEST_PAYLOAD);
+    toast.show(`Base de test chargée (${result.notes} notes)`);
   }
 
   async function importNotes(event: Event) {
@@ -213,6 +230,13 @@
       accept="application/json,.json"
       onchange={importNotes}
     />
+    {#if devMode}
+      <button class="row" onclick={loadTestDatabase}>
+        <span class="label">Charger la base de test</span>
+        <span class="value">dev</span>
+        <Icon name="chevron-right" size={20} class="chev" />
+      </button>
+    {/if}
     <div class="row plain">
       <span class="label">Version</span>
       <span class="value">{appVersion}</span>

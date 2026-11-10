@@ -78,12 +78,15 @@ export function plainText(note: Note): string {
 
 export function htmlToText(html: string): string {
   if (!html) return '';
-  if (typeof document === 'undefined') return html.replace(/<[^>]*>/g, ' ');
+  if (typeof document === 'undefined') return html.replace(/<[^>]*>/g, ' ').replace(/\u200b/g, '');
   const el = document.createElement('div');
   el.innerHTML = html
     .replace(/<\/(div|p|li|h[1-6]|blockquote)>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n');
-  return (el.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
+  return (el.textContent ?? '')
+    .replace(/\u200b/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export function escapeHtml(value: string): string {
