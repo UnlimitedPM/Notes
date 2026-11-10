@@ -4,11 +4,13 @@
   import EditorScreen from './lib/components/EditorScreen.svelte';
   import SettingsScreen from './lib/components/SettingsScreen.svelte';
   import TrashScreen from './lib/components/TrashScreen.svelte';
+  import FoldersScreen from './lib/components/FoldersScreen.svelte';
   import Toast from './lib/components/Toast.svelte';
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import { notesStore } from './lib/notes.svelte';
+  import { taskLineHtml } from './lib/tasks';
 
-  type Screen = 'home' | 'note' | 'settings' | 'trash';
+  type Screen = 'home' | 'note' | 'settings' | 'trash' | 'folders';
 
   let screen = $state<Screen>('home');
   let homeTab = $state<'notes' | 'tasks'>('notes');
@@ -57,13 +59,16 @@
   }
 
   function createNote() {
-    const note =
-      homeTab === 'tasks' ? notesStore.create('checklist') : notesStore.create('text');
+    const note = notesStore.create(homeTab === 'tasks' ? taskLineHtml() : '');
     openNote(note.id);
   }
 
   function openSettings() {
     push('settings');
+  }
+
+  function openFolders() {
+    push('folders');
   }
 
   function openTrash() {
@@ -94,6 +99,8 @@
     <SettingsScreen onclose={goHome} ontrash={openTrash} />
   {:else if screen === 'trash'}
     <TrashScreen onclose={goHome} />
+  {:else if screen === 'folders'}
+    <FoldersScreen onclose={goHome} />
   {:else}
     <HomeScreen
       tab={homeTab}
@@ -101,6 +108,7 @@
       onopen={openNote}
       onnew={createNote}
       onsettings={openSettings}
+      onfolders={openFolders}
     />
   {/if}
 

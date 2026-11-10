@@ -1,12 +1,14 @@
 class ConfirmStore {
   open = $state(false);
+  title = $state('');
   message = $state('');
   confirmLabel = $state('Supprimer');
   private resolver: ((value: boolean) => void) | null = null;
 
-  ask(message: string, confirmLabel = 'Supprimer'): Promise<boolean> {
+  ask(title: string, message: string, confirmLabel = 'Supprimer'): Promise<boolean> {
     // Une seule demande à la fois
     this.resolver?.(false);
+    this.title = title;
     this.message = message;
     this.confirmLabel = confirmLabel;
     this.open = true;

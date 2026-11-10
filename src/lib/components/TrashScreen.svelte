@@ -11,12 +11,20 @@
   let { onclose }: Props = $props();
 
   async function purge(id: string) {
-    const ok = await confirmStore.ask('Supprimer définitivement cette note ?');
+    const ok = await confirmStore.ask(
+      'Supprimer définitivement',
+      'Cette note ne pourra pas être récupérée.',
+      'Supprimer'
+    );
     if (ok) notesStore.purge(id);
   }
 
   async function emptyTrash() {
-    const ok = await confirmStore.ask('Vider la corbeille ? Cette action est définitive.', 'Vider');
+    const ok = await confirmStore.ask(
+      'Vider la corbeille',
+      'Toutes les notes supprimées seront perdues.',
+      'Vider'
+    );
     if (ok) notesStore.emptyTrash();
   }
 </script>

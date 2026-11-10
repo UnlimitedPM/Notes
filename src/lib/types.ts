@@ -27,6 +27,7 @@ export interface Note {
   color: NoteColorKey;
   pinned: boolean;
   folderId: string | null;
+  hidden: boolean;
   tags: string[];
   createdAt: number;
   updatedAt: number;
@@ -46,7 +47,7 @@ export type LayoutKey = 'grid' | 'list';
 
 export interface TaskEntry {
   noteId: string;
-  itemId: string;
+  index: number;
   text: string;
   done: boolean;
   noteTitle: string;

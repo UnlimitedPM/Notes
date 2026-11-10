@@ -15,13 +15,13 @@
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   // svelte-ignore state_referenced_locally
-  const id = task.itemId;
+  const index = task.index;
   // svelte-ignore state_referenced_locally
   const noteId = task.noteId;
 
   function commit() {
     clearTimeout(timer);
-    if (text !== task.text) notesStore.setTaskText(noteId, id, text);
+    if (text !== task.text) notesStore.setTaskText(noteId, index, text);
   }
 
   function onInput() {
@@ -57,7 +57,7 @@
 <div class="task-card" class:done={task.done}>
   <button
     class="task-check"
-    onclick={() => notesStore.toggleTask(noteId, id)}
+    onclick={() => notesStore.toggleTask(noteId, index)}
     aria-label={task.done ? 'Décocher la tâche' : 'Cocher la tâche'}
   >
     {#if task.done}<Icon name="check" size={16} stroke={3.2} />{/if}

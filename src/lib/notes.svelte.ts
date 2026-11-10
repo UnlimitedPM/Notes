@@ -1,10 +1,8 @@
 import type {
-  ChecklistItem,
   Folder,
   LayoutKey,
   Note,
   NoteColorKey,
-  NoteKind,
   SortKey,
   TaskEntry,
   TextSizeKey,
@@ -12,16 +10,13 @@ import type {
 } from './types';
 import { deleteAllNotes, deleteNote, loadAllNotes, saveNote, saveNotes } from './db';
 import { plainText } from './format';
+import { parseTasks, setTaskTextAt, taskLineHtml, toggleTaskAt } from './tasks';
 
 export function uid(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-export function cloneItems(items: ChecklistItem[]): ChecklistItem[] {
-  return items.map((i) => ({ id: i.id, text: i.text, done: i.done }));
 }
 
 function readString<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
@@ -78,12 +73,18 @@ function compact(value: string): string {
 function seedNotes(): Note[] {
   const now = Date.now();
   const min = 60_000;
-  const base = { color: 'default' as NoteColorKey, pinned: false, folderId: null, tags: [] };
+  const base = {
+    kind: 'text' as const,
+    color: 'default' as NoteColorKey,
+    pinned: false,
+    folderId: null,
+    hidden: false,
+    tags: []
+  };
 
   const welcome: Note = {
     ...base,
     id: uid(),
-    kind: 'text',
     title: 'Bienvenue dans Notes',
     createdAt: now - 3 * min,
     updatedAt: now - 3 * min,
@@ -94,32 +95,30 @@ function seedNotes(): Note[] {
       '<div><br></div>' +
       '<div>• Appuyez sur + pour créer une note</div>' +
       '<div>• Touchez une note pour la lire, touchez le texte pour l’éditer</div>' +
-      '<div>• Maintenez une carte pour la colorer, la déplacer ou la supprimer</div>' +
-      '<div>• Le bouton en forme de case transforme la note en liste</div>' +
+      '<div>• Maintenez une carte pour sélectionner, épingler ou supprimer</div>' +
+      '<div>• Le bouton case transforme la ligne courante en case à cocher : on peut mélanger texte et tâches</div>' +
       '<div>• Les cases cochées se retrouvent dans l’onglet Tâches</div>'
   };
 
   const tasks: Note = {
     ...base,
     id: uid(),
-    kind: 'checklist',
     title: 'À faire',
     createdAt: now - 40 * min,
     updatedAt: now - 40 * min,
     deletedAt: null,
-    html: '',
-    items: [
-      { id: uid(), text: 'Bienvenue dans Tâches !', done: false },
-      { id: uid(), text: 'Appuyez sur une tâche pour modifier son texte.', done: false },
-      { id: uid(), text: 'Cochez la case pour marquer une tâche terminée.', done: false },
-      { id: uid(), text: 'Le bouton + crée une nouvelle liste.', done: true }
-    ]
+    items: [],
+    html: [
+      taskLineHtml('Bienvenue dans Tâches !'),
+      taskLineHtml('Appuyez sur une tâche pour modifier son texte.'),
+      taskLineHtml('Cochez la case pour marquer une tâche terminée.'),
+      taskLineHtml('Le bouton + crée une nouvelle note.')
+    ].join('')
   };
 
   const ideas: Note = {
     ...base,
     id: uid(),
-    kind: 'text',
     title: 'Idées',
     createdAt: now - 26 * 60 * min,
     updatedAt: now - 26 * 60 * min,
@@ -135,24 +134,22 @@ function seedNotes(): Note[] {
   const shopping: Note = {
     ...base,
     id: uid(),
-    kind: 'checklist',
     title: 'Liste de courses',
     createdAt: now - 9 * 24 * 60 * min,
     updatedAt: now - 9 * 24 * 60 * min,
     deletedAt: null,
-    html: '',
-    items: [
-      { id: uid(), text: 'Lait', done: false },
-      { id: uid(), text: 'Pain complet', done: false },
-      { id: uid(), text: 'Café', done: true },
-      { id: uid(), text: 'Tomates', done: false }
-    ]
+    items: [],
+    html: [
+      taskLineHtml('Lait'),
+      taskLineHtml('Pain complet'),
+      taskLineHtml('Café', true),
+      taskLineHtml('Tomates')
+    ].join('')
   };
 
   const wifi: Note = {
     ...base,
     id: uid(),
-    kind: 'text',
     title: 'Wi-Fi maison',
     createdAt: now - 31 * 24 * 60 * min,
     updatedAt: now - 31 * 24 * 60 * min,
@@ -179,17 +176,22 @@ class NotesStore {
   layout = $state<LayoutKey>(readString('notes:layout', ['grid', 'list'], 'grid'));
   quickNotes = $state(readBool('notes:quickNotes', true));
   highPriorityReminders = $state(readBool('notes:reminders', false));
+  showHidden = $state(readBool('notes:showHidden', false));
 
   private started = false;
 
   get active(): Note[] {
-    return this.notes.filter((n) => !n.deletedAt);
+    return this.notes.filter((n) => !n.deletedAt && (this.showHidden || !n.hidden));
   }
 
   get trash(): Note[] {
     return this.notes
       .filter((n) => n.deletedAt)
       .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+  }
+
+  get hiddenCount(): number {
+    return this.notes.filter((n) => !n.deletedAt && n.hidden).length;
   }
 
   get sorted(): Note[] {
@@ -219,18 +221,17 @@ class NotesStore {
     ];
   }
 
-  /** Toutes les tâches (cases à cocher) de toutes les listes, non terminées d'abord. */
+  /** Toutes les cases à cocher de toutes les notes, non terminées d'abord. */
   get tasks(): TaskEntry[] {
     const out: TaskEntry[] = [];
     for (const note of this.sorted) {
-      if (note.kind !== 'checklist') continue;
-      for (const item of note.items) {
-        if (!item.text.trim()) continue;
+      for (const task of parseTasks(note.html)) {
+        if (!task.text) continue;
         out.push({
           noteId: note.id,
-          itemId: item.id,
-          text: item.text,
-          done: item.done,
+          index: task.index,
+          text: task.text,
+          done: task.done,
           noteTitle: note.title,
           noteUpdatedAt: note.updatedAt
         });
@@ -280,8 +281,31 @@ class NotesStore {
         write('notes:seed', '1');
         await saveNotes(notes);
       }
-      // Compatibilité avec d'anciennes données
-      this.notes = notes.map((n) => ({ ...n, folderId: n.folderId ?? null }));
+
+      // Migration : anciennes listes (kind + items) → lignes de cases dans le texte.
+      let migrated = false;
+      const normalized = notes.map((n) => {
+        let html = n.html ?? '';
+        if (n.kind === 'checklist' && (n.items?.length ?? 0) > 0) {
+          html = n.items.map((item) => taskLineHtml(item.text, item.done)).join('');
+          migrated = true;
+        }
+        const next: Note = {
+          ...n,
+          kind: 'text',
+          items: [],
+          html,
+          folderId: n.folderId ?? null,
+          hidden: n.hidden ?? false
+        };
+        if (n.kind !== 'text' || n.hidden === undefined || n.folderId === undefined) {
+          migrated = true;
+        }
+        return next;
+      });
+
+      this.notes = normalized;
+      if (migrated) await saveNotes(normalized);
     } catch (error) {
       console.error('Chargement des notes impossible', error);
     } finally {
@@ -292,20 +316,21 @@ class NotesStore {
     }
   }
 
-  create(kind: NoteKind, patch: Partial<Note> = {}): Note {
+  create(initialHtml = '', patch: Partial<Note> = {}): Note {
     const now = Date.now();
     const note: Note = {
       id: uid(),
-      kind,
+      kind: 'text',
       title: '',
-      html: '',
-      items: kind === 'checklist' ? [{ id: uid(), text: '', done: false }] : [],
+      html: initialHtml,
+      items: [],
       color: 'default',
       pinned: false,
       folderId:
         this.activeCategory !== 'all' && this.activeCategory !== 'none'
           ? this.activeCategory
           : null,
+      hidden: false,
       tags: [],
       createdAt: now,
       updatedAt: now,
@@ -332,9 +357,9 @@ class NotesStore {
       ...note,
       id: uid(),
       title: note.title ? `${note.title} (copie)` : '',
-      items: cloneItems(note.items),
       tags: [...note.tags],
       pinned: false,
+      hidden: false,
       createdAt: now,
       updatedAt: now,
       deletedAt: null
@@ -353,18 +378,34 @@ class NotesStore {
     if (note) void this.update(id, { pinned: !note.pinned });
   }
 
-  toggleTask(noteId: string, itemId: string): void {
+  toggleTask(noteId: string, index: number): void {
     const note = this.notes.find((n) => n.id === noteId);
     if (!note) return;
-    const items = note.items.map((i) => (i.id === itemId ? { ...i, done: !i.done } : { ...i }));
-    void this.update(noteId, { items });
+    void this.update(noteId, { html: toggleTaskAt(note.html, index) });
   }
 
-  setTaskText(noteId: string, itemId: string, text: string): void {
+  setTaskText(noteId: string, index: number, text: string): void {
     const note = this.notes.find((n) => n.id === noteId);
     if (!note) return;
-    const items = note.items.map((i) => (i.id === itemId ? { ...i, text } : { ...i }));
-    void this.update(noteId, { items });
+    void this.update(noteId, { html: setTaskTextAt(note.html, index, text) });
+  }
+
+  pinMany(ids: string[]): void {
+    const allPinned = ids.every((id) => this.notes.find((n) => n.id === id)?.pinned);
+    for (const id of ids) void this.update(id, { pinned: !allPinned });
+  }
+
+  moveMany(ids: string[], folderId: string | null): void {
+    for (const id of ids) void this.update(id, { folderId });
+  }
+
+  hideMany(ids: string[]): void {
+    for (const id of ids) void this.update(id, { hidden: true });
+  }
+
+  trashMany(ids: string[]): void {
+    const now = Date.now();
+    for (const id of ids) void this.update(id, { deletedAt: now });
   }
 
   trashNote(id: string): void {
@@ -423,6 +464,11 @@ class NotesStore {
     write('notes:reminders', value ? '1' : '0');
   }
 
+  setShowHidden(value: boolean): void {
+    this.showHidden = value;
+    write('notes:showHidden', value ? '1' : '0');
+  }
+
   createFolder(name: string): Folder | null {
     const trimmed = name.trim();
     if (!trimmed) return null;
@@ -430,13 +476,6 @@ class NotesStore {
     this.folders = [...this.folders, folder];
     write('notes:folders', JSON.stringify(this.folders));
     return folder;
-  }
-
-  renameFolder(id: string, name: string): void {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    this.folders = this.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f));
-    write('notes:folders', JSON.stringify(this.folders));
   }
 
   deleteFolder(id: string): void {

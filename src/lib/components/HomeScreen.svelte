@@ -4,13 +4,12 @@
   import TaskCard from './TaskCard.svelte';
   import Sheet from './Sheet.svelte';
   import TabBar from './TabBar.svelte';
-  import { tick } from 'svelte';
   import { notesStore } from '../notes.svelte';
   import { confirmStore } from '../confirm.svelte';
-  import { NOTE_COLORS } from '../colors';
-  import type { Folder, Note, NoteColorKey } from '../types';
-
-  type SheetName = 'actions' | 'color' | 'folders' | 'move' | null;
+  import { toast } from '../toast.svelte';
+  import { taskLineHtml } from '../tasks';
+  import { tick } from 'svelte';
+  import type { Note } from '../types';
 
   interface Props {
     tab: 'notes' | 'tasks';
@@ -18,48 +17,40 @@
     onopen: (id: string) => void;
     onnew: () => void;
     onsettings: () => void;
+    onfolders: () => void;
   }
 
-  let { tab, ontab, onopen, onnew, onsettings }: Props = $props();
+  let { tab, ontab, onopen, onnew, onsettings, onfolders }: Props = $props();
 
-  let sheet = $state<SheetName>(null);
-  let selectedId = $state<string | null>(null);
-  let showCompleted = $state(false);
-  let addingFolder = $state(false);
-  let folderName = $state('');
-  let folderInput = $state<HTMLInputElement | null>(null);
   let query = $state('');
-  let searchInput = $state<HTMLInputElement | null>(null);
+  let moveOpen = $state(false);
+  let showCompleted = $state(false);
 
-  const selected = $derived(
-    selectedId ? (notesStore.notes.find((n) => n.id === selectedId) ?? null) : null
-  );
+  let selecting = $state(false);
+  let selectedIds = $state<string[]>([]);
+
+  let composerOpen = $state(false);
+  let composerText = $state('');
+  let composerNoteId = $state<string | null>(null);
+  let composerInput = $state<HTMLTextAreaElement | null>(null);
+
   const notes = $derived(notesStore.search(query));
   const columns = $derived(splitColumns(notes));
   const tasks = $derived(notesStore.tasks);
   const completedCount = $derived(tasks.filter((t) => t.done).length);
+  const selectedCount = $derived(selectedIds.length);
 
-  const sheetTitle = $derived(
-    sheet === 'color'
-      ? 'Couleur de la note'
-      : sheet === 'actions'
-        ? selected?.title || 'Note'
-        : sheet === 'folders'
-          ? 'Dossiers'
-          : sheet === 'move'
-            ? 'Déplacer vers'
-            : ''
+  const selectionTitle = $derived(
+    `${selectedCount} élément${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`
   );
 
   function splitColumns(list: Note[]): Note[][] {
     const cols: Note[][] = [[], []];
     const heights = [0, 0];
     for (const note of list) {
-      const body =
-        note.kind === 'checklist'
-          ? note.items.map((i) => i.text).join(' ')
-          : note.html.replace(/<[^>]*>/g, ' ');
-      const estimate = 92 + Math.min(150, body.length * 0.62);
+      const image = /<img[^>]+src=/.test(note.html);
+      const body = note.html.replace(/<[^>]*>/g, ' ');
+      const estimate = (image ? 190 : 92) + Math.min(150, body.length * 0.62);
       const target = heights[0] <= heights[1] ? 0 : 1;
       cols[target].push(note);
       heights[target] += estimate;
@@ -67,99 +58,131 @@
     return cols;
   }
 
-  function openActions(note: Note) {
-    selectedId = note.id;
-    sheet = 'actions';
+  function enterSelection(note: Note) {
+    selecting = true;
+    selectedIds = [note.id];
   }
 
-  function togglePin() {
-    if (!selected) return;
-    notesStore.togglePin(selected.id);
-    sheet = null;
+  function exitSelection() {
+    selecting = false;
+    selectedIds = [];
   }
 
-  function duplicateNote() {
-    if (!selected) return;
-    const copy = notesStore.duplicate(selected);
-    sheet = null;
-    onopen(copy.id);
+  function toggleSelection(id: string) {
+    selectedIds = selectedIds.includes(id)
+      ? selectedIds.filter((value) => value !== id)
+      : [...selectedIds, id];
+    if (selectedIds.length === 0) selecting = false;
   }
 
-  function deleteNote() {
-    if (!selected) return;
-    notesStore.trashNote(selected.id);
-    sheet = null;
+  function selectAll() {
+    selectedIds = notes.map((n) => n.id);
   }
 
-  function chooseColor(color: NoteColorKey) {
-    if (!selected) return;
-    notesStore.setColor(selected.id, color);
-    sheet = null;
+  function pinSelected() {
+    notesStore.pinMany(selectedIds);
+    exitSelection();
+  }
+
+  function hideSelected() {
+    notesStore.hideMany(selectedIds);
+    toast.show(`${selectedCount} note${selectedCount > 1 ? 's' : ''} masquée${selectedCount > 1 ? 's' : ''}`);
+    exitSelection();
+  }
+
+  async function deleteSelected() {
+    const ok = await confirmStore.ask(
+      'Supprimer des notes',
+      `Supprimer ${selectedCount} élément${selectedCount > 1 ? 's' : ''} ?`,
+      'Supprimer'
+    );
+    if (!ok) return;
+    notesStore.trashMany(selectedIds);
+    exitSelection();
   }
 
   function moveTo(folderId: string | null) {
-    if (!selected) return;
-    notesStore.setNoteFolder(selected.id, folderId);
-    sheet = null;
+    notesStore.moveMany(selectedIds, folderId);
+    moveOpen = false;
+    exitSelection();
   }
 
-  function selectFolder(folderId: string | null) {
-    notesStore.activeCategory = folderId ?? 'all';
-    sheet = null;
-  }
-
-  async function startFolder() {
-    addingFolder = true;
+  async function openComposer() {
+    composerOpen = true;
+    composerNoteId = null;
+    composerText = '';
     await tick();
-    folderInput?.focus();
+    composerInput?.focus();
   }
 
-  function confirmFolder() {
-    const folder = notesStore.createFolder(folderName);
-    folderName = '';
-    addingFolder = false;
-    if (folder) notesStore.activeCategory = folder.id;
-    sheet = null;
+  function commitComposer(): boolean {
+    const text = composerText.trim();
+    if (!text) return false;
+    if (!composerNoteId) {
+      const note = notesStore.create(taskLineHtml(text));
+      composerNoteId = note.id;
+    } else {
+      const note = notesStore.notes.find((n) => n.id === composerNoteId);
+      if (note) void notesStore.update(note.id, { html: note.html + taskLineHtml(text) });
+    }
+    composerText = '';
+    composerInput?.focus();
+    return true;
   }
 
-  async function removeFolder(folder: Folder) {
-    const ok = await confirmStore.ask(
-      `Supprimer le dossier « ${folder.name} » ? Les notes ne sont pas supprimées.`
-    );
-    if (ok) notesStore.deleteFolder(folder.id);
+  function closeComposer() {
+    commitComposer();
+    composerOpen = false;
+    composerText = '';
+    composerNoteId = null;
   }
 
-  function later(fn: () => void) {
-    setTimeout(fn, 210);
+  function autosize(node: HTMLTextAreaElement) {
+    const resize = () => {
+      node.style.height = 'auto';
+      node.style.height = `${node.scrollHeight}px`;
+    };
+    resize();
+    node.addEventListener('input', resize);
+    return {
+      destroy() {
+        node.removeEventListener('input', resize);
+      }
+    };
   }
 </script>
 
 <div class="home">
   <div class="scroll">
-    <div class="top-icons">
-      {#if tab === 'notes'}
-        <button
-          class="icon-btn"
-          onclick={() => (sheet = 'folders')}
-          aria-label="Dossiers"
-        >
-          <Icon name="folder" size={26} stroke={1.6} />
+    {#if selecting}
+      <div class="top-icons">
+        <button class="icon-btn" onclick={exitSelection} aria-label="Quitter la sélection">
+          <Icon name="close" size={24} stroke={1.9} />
         </button>
-      {/if}
-      <button class="icon-btn" onclick={onsettings} aria-label="Paramètres">
-        <Icon name="gear" size={25} stroke={1.6} />
-      </button>
-    </div>
-
-    <h1 class="screen-title">
-      {tab === 'tasks' ? 'Tâches' : 'Notes'}
-    </h1>
+        <div class="spacer"></div>
+        <button class="icon-btn" onclick={selectAll} aria-label="Tout sélectionner">
+          <Icon name="select-all" size={25} />
+        </button>
+      </div>
+      <h1 class="screen-title select-title">{selectionTitle}</h1>
+    {:else}
+      <div class="top-icons">
+        {#if tab === 'notes'}
+          <button class="icon-btn" onclick={onfolders} aria-label="Dossiers">
+            <Icon name="folder" size={24} stroke={1.6} />
+          </button>
+        {/if}
+        <button class="icon-btn" onclick={onsettings} aria-label="Paramètres">
+          <Icon name="gear" size={24} stroke={1.6} />
+        </button>
+      </div>
+      <h1 class="screen-title">{tab === 'tasks' ? 'Tâches' : 'Notes'}</h1>
+    {/if}
 
     {#if tab === 'notes'}
       <div class="searchbar">
         <Icon name="search" size={20} class="search-icon" />
         <input
-          bind:this={searchInput}
           bind:value={query}
           class="search-input"
           type="search"
@@ -192,7 +215,14 @@
             {#each columns as column, index (index)}
               <div class="col">
                 {#each column as note (note.id)}
-                  <NoteCard {note} onopen={onopen} onlong={openActions} />
+                  <NoteCard
+                    {note}
+                    selectable={selecting}
+                    selected={selectedIds.includes(note.id)}
+                    onopen={onopen}
+                    onlong={enterSelection}
+                    ontoggle={toggleSelection}
+                  />
                 {/each}
               </div>
             {/each}
@@ -200,7 +230,14 @@
         {:else}
           <div class="list">
             {#each notes as note (note.id)}
-              <NoteCard {note} onopen={onopen} onlong={openActions} />
+              <NoteCard
+                {note}
+                selectable={selecting}
+                selected={selectedIds.includes(note.id)}
+                onopen={onopen}
+                onlong={enterSelection}
+                ontoggle={toggleSelection}
+              />
             {/each}
           </div>
         {/if}
@@ -216,13 +253,13 @@
     {:else}
       {#if tasks.length}
         <div class="tasks">
-          {#each tasks.filter((t) => !t.done) as task (`${task.noteId}:${task.itemId}`)}
+          {#each tasks.filter((t) => !t.done) as task (`${task.noteId}:${task.index}`)}
             <TaskCard {task} />
           {/each}
 
           {#if completedCount}
             {#if showCompleted}
-              {#each tasks.filter((t) => t.done) as task (`${task.noteId}:${task.itemId}`)}
+              {#each tasks.filter((t) => t.done) as task (`${task.noteId}:${task.index}`)}
                 <TaskCard {task} />
               {/each}
             {/if}
@@ -245,118 +282,80 @@
     {/if}
   </div>
 
-  <button
-    class="fab"
-    onclick={onnew}
-    aria-label={tab === 'tasks' ? 'Nouvelle tâche' : 'Nouvelle note'}
-  >
-    <Icon name="plus" size={28} stroke={1.9} />
-  </button>
-
-  <TabBar {tab} {ontab} />
-
-  <Sheet open={sheet !== null} onclose={() => (sheet = null)} title={sheetTitle}>
-    {#if sheet === 'actions'}
-      <button class="sheet-row" onclick={togglePin}>
-        <Icon name={selected?.pinned ? 'pin-filled' : 'pin'} size={22} />
-        <span class="grow">{selected?.pinned ? 'Désépingler' : 'Épingler'}</span>
+  {#if selecting}
+    <nav class="actions" aria-label="Actions sur la sélection">
+      <button class="action" onclick={hideSelected}>
+        <Icon name="lock" size={24} />
+        <span>Masquer</span>
       </button>
-      <button class="sheet-row" onclick={() => later(() => (sheet = 'color'))}>
-        <Icon name="palette" size={22} />
-        <span class="grow">Couleur</span>
+      <button class="action" onclick={pinSelected}>
+        <Icon name="pin" size={24} />
+        <span>Épingler</span>
       </button>
-      <button class="sheet-row" onclick={() => later(() => (sheet = 'move'))}>
+      <button class="action" onclick={() => (moveOpen = true)}>
+        <Icon name="folder-move" size={24} />
+        <span>Déplacer vers</span>
+      </button>
+      <button class="action" onclick={deleteSelected}>
+        <Icon name="trash" size={24} />
+        <span>Supprimer</span>
+      </button>
+    </nav>
+  {:else}
+    <button
+      class="fab"
+      onclick={tab === 'tasks' ? openComposer : onnew}
+      aria-label={tab === 'tasks' ? 'Nouvelle tâche' : 'Nouvelle note'}
+    >
+      <Icon name="plus" size={28} stroke={1.9} />
+    </button>
+    <TabBar {tab} {ontab} />
+  {/if}
+
+  <Sheet open={moveOpen} onclose={() => (moveOpen = false)} title="Déplacer vers">
+    <button class="sheet-row" onclick={() => moveTo(null)}>
+      <Icon name="note" size={22} />
+      <span class="grow">Sans catégorie</span>
+    </button>
+    {#each notesStore.folders as folder (folder.id)}
+      <button class="sheet-row" onclick={() => moveTo(folder.id)}>
         <Icon name="folder" size={22} />
-        <span class="grow">Déplacer vers</span>
+        <span class="grow">{folder.name}</span>
+        <span class="muted">{notesStore.countFolder(folder.id)}</span>
       </button>
-      <button class="sheet-row" onclick={duplicateNote}>
-        <Icon name="copy" size={22} />
-        <span class="grow">Dupliquer</span>
-      </button>
-      <button class="sheet-row danger" onclick={deleteNote}>
-        <Icon name="trash" size={22} />
-        <span class="grow">Supprimer</span>
-      </button>
-    {:else if sheet === 'color'}
-      <div class="colors">
-        {#each NOTE_COLORS as color (color.key)}
-          <button
-            class="swatch-wrap"
-            onclick={() => chooseColor(color.key)}
-            aria-label={color.label}
-          >
-            <span class="swatch" data-note-color={color.key}>
-              {#if selected?.color === color.key}
-                <Icon name="check" size={16} stroke={2.6} />
-              {/if}
-            </span>
-            <span class="swatch-label">{color.label}</span>
-          </button>
-        {/each}
-      </div>
-    {:else if sheet === 'folders'}
-      <button class="sheet-row" onclick={() => selectFolder(null)}>
-        <Icon name="note" size={22} />
-        <span class="grow">Toutes les notes</span>
-        <span class="muted">{notesStore.countFolder(null)}</span>
-        {#if notesStore.activeCategory === 'all'}<Icon name="check" size={18} class="check" />{/if}
-      </button>
-      {#each notesStore.folders as folder (folder.id)}
-        <div class="folder-line">
-          <button class="sheet-row folder-pick" onclick={() => selectFolder(folder.id)}>
-            <Icon name="folder" size={22} />
-            <span class="grow">{folder.name}</span>
-            <span class="muted">{notesStore.countFolder(folder.id)}</span>
-            {#if notesStore.activeCategory === folder.id}
-              <Icon name="check" size={18} class="check" />
-            {/if}
-          </button>
-          <button
-            class="icon-btn folder-del"
-            onclick={() => removeFolder(folder)}
-            aria-label={`Supprimer ${folder.name}`}
-          >
-            <Icon name="close" size={16} />
-          </button>
-        </div>
-      {/each}
-      {#if addingFolder}
-        <div class="new-folder">
-          <input
-            class="new-folder-input"
-            bind:this={folderInput}
-            bind:value={folderName}
-            placeholder="Nom du dossier"
-            autocomplete="off"
-            onkeydown={(event) => {
-              if (event.key === 'Enter') confirmFolder();
-            }}
-          />
-          <button class="text-btn" onclick={confirmFolder}>Créer</button>
-        </div>
-      {:else}
-        <button class="sheet-row" onclick={startFolder}>
-          <Icon name="plus" size={22} />
-          <span class="grow">Nouveau dossier</span>
-        </button>
-      {/if}
-    {:else if sheet === 'move'}
-      <button class="sheet-row" onclick={() => moveTo(null)}>
-        <Icon name="note" size={22} />
-        <span class="grow">Aucun dossier</span>
-        {#if selected && !selected.folderId}<Icon name="check" size={18} class="check" />{/if}
-      </button>
-      {#each notesStore.folders as folder (folder.id)}
-        <button class="sheet-row" onclick={() => moveTo(folder.id)}>
-          <Icon name="folder" size={22} />
-          <span class="grow">{folder.name}</span>
-          {#if selected?.folderId === folder.id}
-            <Icon name="check" size={18} class="check" />
-          {/if}
-        </button>
-      {/each}
-    {/if}
+    {/each}
   </Sheet>
+
+  {#if composerOpen}
+    <button class="composer-scrim" aria-label="Fermer" onclick={closeComposer}></button>
+    <div class="composer">
+      <div class="composer-line">
+        <span class="composer-box"></span>
+        <textarea
+          bind:this={composerInput}
+          bind:value={composerText}
+          rows="1"
+          placeholder='Appuyez sur "Entrée" pour créer des sous-tâches'
+          use:autosize
+          onkeydown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              commitComposer();
+            }
+          }}
+        ></textarea>
+      </div>
+      <div class="composer-actions">
+        <button class="reminder" onclick={() => toast.show('Rappels bientôt disponibles')}>
+          <Icon name="bell" size={19} />
+          Définir un rappel
+        </button>
+        <button class="done" disabled={!composerText.trim()} onclick={closeComposer}>
+          Terminé
+        </button>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -384,6 +383,10 @@
     color: var(--text);
   }
 
+  .top-icons .spacer {
+    flex: 1;
+  }
+
   .top-icons :global(.icon-btn) {
     width: 40px;
     height: 40px;
@@ -391,6 +394,11 @@
 
   .screen-title {
     padding-top: 14px;
+  }
+
+  .select-title {
+    padding-top: 18px;
+    font-size: 32px;
   }
 
   .searchbar {
@@ -528,80 +536,124 @@
     transform: scale(0.93);
   }
 
-  :global(.check) {
-    color: var(--accent);
-  }
-
-  .folder-line {
+  .actions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
     display: flex;
-    align-items: center;
-    gap: 2px;
+    height: calc(70px + var(--safe-bottom));
+    padding-bottom: var(--safe-bottom);
+    background: var(--bg);
   }
 
-  .folder-pick {
+  .action {
     flex: 1;
-    min-width: 0;
-  }
-
-  .folder-del {
-    width: 34px;
-    height: 34px;
-    margin-right: 6px;
-    color: var(--text-3);
-  }
-
-  .new-folder {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px 4px;
-  }
-
-  .new-folder-input {
-    flex: 1;
-    min-width: 0;
-    height: 44px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--surface-2);
-    padding: 0 14px;
-    font-size: 16px;
-    outline: none;
-  }
-
-  .colors {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    padding: 4px 8px 10px;
-  }
-
-  .swatch-wrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 6px 0;
-    border-radius: 14px;
-  }
-
-  .swatch {
-    width: 54px;
-    height: 54px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 12.5px;
     color: var(--text);
-    background: var(--card-bg, var(--surface-2));
-    border: 1px solid var(--line);
   }
 
-  .swatch-wrap:active .swatch {
-    transform: scale(0.94);
+  .action:active {
+    background: var(--surface-2);
   }
 
-  .swatch-label {
-    font-size: 11.5px;
-    color: var(--text-3);
+  .composer-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .composer {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(10px + var(--safe-bottom));
+    z-index: 41;
+    max-width: 496px;
+    margin: 0 auto;
+    padding: 16px 18px 14px;
+    border-radius: 26px;
+    background: #2c2c2e;
+    color: #fff;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  }
+
+  .composer-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .composer-box {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    margin-top: 3px;
+    border-radius: 7px;
+    border: 2px solid #8a8a90;
+  }
+
+  .composer-line textarea {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    font-size: 19px;
+    line-height: 1.4;
+    color: #fff;
+  }
+
+  .composer-line textarea::placeholder {
+    color: #8a8a90;
+  }
+
+  .composer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .reminder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 19px;
+    background: #3a3a3c;
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 500;
+  }
+
+  .done {
+    height: 38px;
+    padding: 0 14px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #8a8a90;
+  }
+
+  .done:not(:disabled) {
+    color: #fff;
+  }
+
+  :global(.check) {
+    color: var(--accent);
   }
 </style>

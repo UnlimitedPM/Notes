@@ -1,29 +1,34 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { formatCardDate, htmlToText } from '../format';
   import type { Note } from '../types';
 
   interface Props {
     note: Note;
+    selected?: boolean;
+    selectable?: boolean;
     onopen: (id: string) => void;
     onlong: (note: Note) => void;
+    ontoggle?: (id: string) => void;
   }
 
-  let { note, onopen, onlong }: Props = $props();
+  let { note, selected = false, selectable = false, onopen, onlong, ontoggle }: Props = $props();
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let longPressed = false;
 
   const image = $derived(note.html.match(/<img[^>]+src="([^"]+)"/i)?.[1] ?? null);
-  const preview = $derived(
-    note.kind === 'checklist'
-      ? note.items
-          .map((i) => i.text)
-          .filter(Boolean)
-          .join('\n')
-      : htmlToText(note.html)
+  const lines = $derived(
+    htmlToText(note.html)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
   );
+  const displayTitle = $derived(note.title || lines[0] || '');
+  const preview = $derived(note.title ? lines.join('\n') : lines.slice(1).join('\n'));
 
   function pressStart() {
+    if (selectable) return;
     longPressed = false;
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -42,17 +47,22 @@
       longPressed = false;
       return;
     }
+    if (selectable) {
+      ontoggle?.(note.id);
+      return;
+    }
     onopen(note.id);
   }
 
   function handleContext(event: MouseEvent) {
     event.preventDefault();
-    onlong(note);
+    if (!selectable) onlong(note);
   }
 </script>
 
 <button
   class="note-card"
+  class:selected
   data-note-color={note.color}
   onpointerdown={pressStart}
   onpointerup={pressEnd}
@@ -65,18 +75,24 @@
     <span class="thumb"><img src={image} alt="" /></span>
   {/if}
   <span class="content">
-    {#if note.title}
-      <h3 class="card-title">{note.title}</h3>
+    {#if displayTitle}
+      <h3 class="card-title">{displayTitle}</h3>
     {/if}
     {#if !image}
       <p class="card-text">{preview || 'Pas de texte'}</p>
     {/if}
     <span class="card-date">{formatCardDate(note.updatedAt)}</span>
   </span>
+  {#if selectable}
+    <span class="pick" class:on={selected}>
+      {#if selected}<Icon name="check" size={14} stroke={3} />{/if}
+    </span>
+  {/if}
 </button>
 
 <style>
   .note-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -153,5 +169,23 @@
     font-size: 13px;
     line-height: 1.2;
     color: var(--text-3);
+  }
+
+  .pick {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(120, 120, 128, 0.5);
+    display: grid;
+    place-items: center;
+    color: #fff;
+    transition: background 0.15s ease;
+  }
+
+  .pick.on {
+    background: var(--accent);
   }
 </style>

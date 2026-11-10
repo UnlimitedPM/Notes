@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import Icon from './Icon.svelte';
   import Sheet from './Sheet.svelte';
-  import { cloneItems, notesStore, uid } from '../notes.svelte';
+  import { notesStore } from '../notes.svelte';
   import { NOTE_COLORS } from '../colors';
-  import { escapeHtml, formatNoteDate, htmlToText } from '../format';
+  import { formatNoteDate, htmlToText } from '../format';
   import { toast } from '../toast.svelte';
-  import type { ChecklistItem, Note, NoteColorKey } from '../types';
+  import type { Note, NoteColorKey } from '../types';
 
-  type SheetName = 'format' | 'more' | 'color' | 'folder' | null;
+  type SheetName = 'more' | 'color' | 'folder' | null;
 
   interface Props {
     note: Note;
@@ -23,34 +23,32 @@
   // svelte-ignore state_referenced_locally
   let title = $state(note.title);
   // svelte-ignore state_referenced_locally
-  let kind = $state<Note['kind']>(note.kind);
-  // svelte-ignore state_referenced_locally
   let html = $state(note.html);
-  // svelte-ignore state_referenced_locally
-  let items = $state<ChecklistItem[]>(note.items.map((i) => ({ ...i })));
 
   let titleEl = $state<HTMLInputElement | null>(null);
   let bodyEl = $state<HTMLDivElement | null>(null);
-  let docEl = $state<HTMLDivElement | null>(null);
   let fileEl = $state<HTMLInputElement | null>(null);
 
   let editing = $state(false);
+  let formatOpen = $state(false);
   let sheet = $state<SheetName>(null);
   let savedRange: Range | null = null;
 
   let pending: Partial<Note> = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  let history: ChecklistItem[][] = [];
-  let historyIndex = -1;
-
-  const chars = $derived(
-    kind === 'text'
-      ? htmlToText(html).length
-      : items.reduce((total, item) => total + item.text.length, 0)
-  );
+  const chars = $derived(htmlToText(html).length);
   const charLabel = $derived(`${chars} caractère${chars > 1 ? 's' : ''}`);
   const meta = $derived(formatNoteDate(note.updatedAt));
+
+  let format = $state({
+    bold: false,
+    italic: false,
+    h1: false,
+    h2: false,
+    h3: false,
+    highlight: false
+  });
 
   function queue(patch: Partial<Note>) {
     Object.assign(pending, patch);
@@ -78,6 +76,7 @@
   function onBodyInput() {
     html = bodyEl?.innerHTML ?? '';
     queue({ html });
+    refreshFormat();
   }
 
   function startEditing() {
@@ -85,6 +84,7 @@
   }
 
   function stopEditing() {
+    formatOpen = false;
     flush();
     editing = false;
     (document.activeElement as HTMLElement | null)?.blur();
@@ -100,18 +100,22 @@
   }
 
   function trackSelection() {
-    if (kind !== 'text' || !bodyEl) return;
+    if (!bodyEl) return;
+    if (document.activeElement !== bodyEl) return;
     const selection = document.getSelection();
     if (!selection || !selection.rangeCount) return;
     const node = selection.anchorNode;
     if (node && bodyEl.contains(node)) {
       savedRange = selection.getRangeAt(0).cloneRange();
+      refreshFormat();
     }
   }
 
-  function exec(command: string, value?: string) {
-    if (kind !== 'text') return;
-    bodyEl?.focus();
+  function ensureFocus() {
+    if (!bodyEl) return;
+    if (!document.activeElement || !bodyEl.contains(document.activeElement)) {
+      bodyEl.focus();
+    }
     if (savedRange) {
       const selection = document.getSelection();
       if (selection) {
@@ -119,142 +123,164 @@
         selection.addRange(savedRange);
       }
     }
-    document.execCommand('styleWithCSS', false, 'true');
-    document.execCommand(command, false, value);
-    onBodyInput();
-    trackSelection();
   }
 
-  function insertHtml(markup: string) {
-    if (kind !== 'text') {
-      toast.show('Les images sont disponibles dans les notes texte');
-      return;
+  function blockElement(): HTMLElement | null {
+    if (!bodyEl) return null;
+    const selection = document.getSelection();
+    if (!selection || !selection.rangeCount) return null;
+    let node: Node | null = selection.anchorNode;
+    if (!node || !bodyEl.contains(node)) return null;
+    let el: HTMLElement | null =
+      node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+    while (el && el !== bodyEl) {
+      if (el.parentElement === bodyEl) return el;
+      el = el.parentElement;
     }
-    bodyEl?.focus();
-    document.execCommand('insertHTML', false, markup);
-    onBodyInput();
+    return null;
   }
 
-  function undo() {
-    if (kind === 'text') {
-      bodyEl?.focus();
-      document.execCommand('undo');
-      onBodyInput();
-      return;
+  function hasHighlight(): boolean {
+    const selection = document.getSelection();
+    if (!selection) return false;
+    let node: Node | null = selection.anchorNode;
+    let el: HTMLElement | null =
+      node?.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : (node?.parentElement ?? null);
+    while (el && el !== bodyEl) {
+      const bg = getComputedStyle(el).backgroundColor;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return true;
+      el = el.parentElement;
     }
-    if (historyIndex > 0) {
-      historyIndex -= 1;
-      items = cloneItems(history[historyIndex]);
-      queue({ items: cloneItems(items) });
-    }
+    return false;
   }
 
-  function redo() {
-    if (kind === 'text') {
-      bodyEl?.focus();
-      document.execCommand('redo');
-      onBodyInput();
-      return;
-    }
-    if (historyIndex < history.length - 1) {
-      historyIndex += 1;
-      items = cloneItems(history[historyIndex]);
-      queue({ items: cloneItems(items) });
-    }
-  }
-
-  function pushHistory() {
-    history = history.slice(0, historyIndex + 1);
-    history.push(cloneItems(items));
-    if (history.length > 60) history.shift();
-    historyIndex = history.length - 1;
-  }
-
-  function autosizeNow(el: HTMLTextAreaElement) {
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }
-
-  function autoGrow(node: HTMLTextAreaElement) {
-    const resize = () => autosizeNow(node);
-    resize();
-    node.addEventListener('input', resize);
-    return {
-      destroy() {
-        node.removeEventListener('input', resize);
-      }
+  function refreshFormat() {
+    if (!bodyEl) return;
+    const block = blockElement();
+    const tag = block?.tagName ?? '';
+    format = {
+      bold: document.queryCommandState('bold'),
+      italic: document.queryCommandState('italic'),
+      h1: tag === 'H1',
+      h2: tag === 'H2',
+      h3: tag === 'H3',
+      highlight: hasHighlight()
     };
   }
 
-  async function focusItem(index: number) {
-    await tick();
-    const nodes = docEl?.querySelectorAll<HTMLTextAreaElement>('.check-input');
-    const node = nodes?.[index];
-    if (node) {
-      node.focus();
-      const length = node.value.length;
-      node.setSelectionRange(length, length);
+  function exec(command: string, value?: string) {
+    ensureFocus();
+    document.execCommand('styleWithCSS', false, 'true');
+    document.execCommand(command, false, value);
+    onBodyInput();
+  }
+
+  function toggleBold() {
+    exec('bold');
+  }
+
+  function toggleItalic() {
+    exec('italic');
+  }
+
+  function toggleHeading(level: 1 | 2 | 3) {
+    ensureFocus();
+    const block = blockElement();
+    if (block && block.tagName === `H${level}`) {
+      exec('formatBlock', 'DIV');
+    } else {
+      exec('formatBlock', `H${level}`);
     }
+    refreshFormat();
   }
 
-  async function addItem(at: number) {
-    items.splice(at, 0, { id: uid(), text: '', done: false });
-    pushHistory();
-    queue({ items: cloneItems(items) });
-    await tick();
-    focusItem(at);
+  function highlightColor(): string {
+    return document.documentElement.dataset.theme === 'light' ? '#FFE58A' : '#4D3F12';
   }
 
-  async function removeItem(at: number) {
-    if (items.length <= 1) {
-      items[0].text = '';
-      queue({ items: cloneItems(items) });
-      await tick();
-      focusItem(0);
+  function toggleHighlight() {
+    if (hasHighlight()) {
+      exec('hiliteColor', 'transparent');
+    } else {
+      exec('hiliteColor', highlightColor());
+    }
+    refreshFormat();
+  }
+
+  function clearFormat() {
+    exec('removeFormat');
+    const block = blockElement();
+    if (block && /^H[1-3]$/.test(block.tagName)) exec('formatBlock', 'DIV');
+    refreshFormat();
+  }
+
+  function toggleTaskLine() {
+    ensureFocus();
+    const block = blockElement();
+    if (!block) {
+      document.execCommand(
+        'insertHTML',
+        false,
+        '<div class="task-line" data-checked="false"><br></div>'
+      );
+      onBodyInput();
       return;
     }
-    items.splice(at, 1);
-    pushHistory();
-    queue({ items: cloneItems(items) });
-    await tick();
-    focusItem(Math.max(0, at - 1));
+    if (block.classList.contains('task-line')) {
+      block.classList.remove('task-line');
+      block.removeAttribute('data-checked');
+    } else {
+      block.classList.add('task-line');
+      block.setAttribute('data-checked', 'false');
+    }
+    onBodyInput();
   }
 
-  function toggleItem(index: number) {
-    const item = items[index];
-    if (!item) return;
-    item.done = !item.done;
-    pushHistory();
-    queue({ items: cloneItems(items) });
+  function placeCaretAtStart(el: HTMLElement) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(true);
+    const selection = document.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+      savedRange = range.cloneRange();
+    }
   }
 
-  function saveItems() {
-    queue({ items: cloneItems(items) });
+  function onBodyKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    const block = blockElement();
+    if (!block || !block.classList.contains('task-line')) return;
+    event.preventDefault();
+    const next = document.createElement('div');
+    next.className = 'task-line';
+    next.setAttribute('data-checked', 'false');
+    next.innerHTML = '<br>';
+    block.after(next);
+    placeCaretAtStart(next);
+    onBodyInput();
   }
 
-  function commitItems() {
-    pushHistory();
-    saveItems();
-  }
-
-  async function onItemKey(event: KeyboardEvent, index: number) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      commitItems();
-      await addItem(index + 1);
+  function onBodyClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    const line = target.closest('.task-line') as HTMLElement | null;
+    if (!line) {
+      if (formatOpen) formatOpen = false;
       return;
     }
-    if (event.key === 'Backspace' && !items[index]?.text) {
+    const rect = line.getBoundingClientRect();
+    if (event.clientX - rect.left <= 32) {
       event.preventDefault();
-      await removeItem(index);
+      line.setAttribute(
+        'data-checked',
+        line.getAttribute('data-checked') === 'true' ? 'false' : 'true'
+      );
+      onBodyInput();
     }
   }
 
   function pickImage() {
-    if (kind !== 'text') {
-      toast.show('Les images sont disponibles dans les notes texte');
-      return;
-    }
     fileEl?.click();
   }
 
@@ -265,38 +291,25 @@
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        insertHtml(`<img src="${reader.result}" alt="" />`);
+        ensureFocus();
+        document.execCommand('insertHTML', false, `<img src="${reader.result}" alt="" />`);
+        onBodyInput();
       }
     };
     reader.readAsDataURL(file);
     input.value = '';
   }
 
-  function convertKind() {
-    flush();
-    if (kind === 'text') {
-      const raw = (bodyEl?.innerText ?? '').trim();
-      const lines = raw
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
-      items = (lines.length ? lines : ['']).map((text) => ({ id: uid(), text, done: false }));
-      kind = 'checklist';
-      history = [cloneItems(items)];
-      historyIndex = 0;
-      void notesStore.update(id, { kind, items: cloneItems(items), html });
-      void tick().then(() => focusItem(0));
-    } else {
-      const nextHtml = items
-        .filter((item) => item.text.trim())
-        .map((item) => `<div>${escapeHtml(item.text)}</div>`)
-        .join('');
-      html = nextHtml;
-      kind = 'text';
-      void notesStore.update(id, { kind: 'text', html: nextHtml });
-      void tick().then(() => bodyEl?.focus());
-    }
-    sheet = null;
+  function undo() {
+    bodyEl?.focus();
+    document.execCommand('undo');
+    onBodyInput();
+  }
+
+  function redo() {
+    bodyEl?.focus();
+    document.execCommand('redo');
+    onBodyInput();
   }
 
   function togglePin() {
@@ -328,9 +341,7 @@
   }
 
   async function share() {
-    const text = (
-      kind === 'text' ? `${title}\n\n${htmlToText(html)}` : `${title}\n\n${items.map((i) => i.text).join('\n')}`
-    ).trim();
+    const text = `${title}\n\n${htmlToText(html)}`.trim();
     try {
       if (navigator.share) {
         await navigator.share({ title: title || 'Note', text });
@@ -344,9 +355,6 @@
   }
 
   onMount(() => {
-    history = [cloneItems(items)];
-    historyIndex = 0;
-
     document.addEventListener('selectionchange', trackSelection);
     const onHidden = () => {
       if (document.visibilityState === 'hidden') flush();
@@ -354,11 +362,10 @@
     document.addEventListener('visibilitychange', onHidden);
     window.addEventListener('beforeunload', flush);
 
-    const fresh = !note.title && !note.html && note.items.every((i) => !i.text.trim());
+    const fresh = !note.title && !htmlToText(note.html);
     if (fresh) {
       editing = true;
-      if (kind === 'checklist') void focusItem(0);
-      else titleEl?.focus();
+      titleEl?.focus();
     }
 
     return () => {
@@ -403,7 +410,7 @@
     {/if}
   </header>
 
-  <div class="doc" bind:this={docEl}>
+  <div class="doc">
     <input
       bind:this={titleEl}
       bind:value={title}
@@ -426,70 +433,128 @@
       <span>{charLabel}</span>
     </div>
 
-    {#if kind === 'text'}
-      <div
-        class="note-body"
-        contenteditable="true"
-        spellcheck="false"
-        data-placeholder="Écrivez quelque chose…"
-        bind:this={bodyEl}
-        use:initBody
-        oninput={onBodyInput}
-        onfocus={startEditing}
-      ></div>
-    {:else}
-      <div class="checklist" onfocusin={startEditing}>
-        {#each items as item, index (item.id)}
-          <div class="check-row" class:done={item.done}>
-            <button
-              class="check-box"
-              onclick={() => toggleItem(index)}
-              aria-label={item.done ? 'Décocher' : 'Cocher'}
-            >
-              {#if item.done}<Icon name="check" size={15} stroke={3.2} />{/if}
-            </button>
-            <textarea
-              class="check-input"
-              rows="1"
-              bind:value={item.text}
-              placeholder="Élément"
-              spellcheck="false"
-              use:autoGrow
-              oninput={saveItems}
-              onblur={commitItems}
-              onkeydown={(event) => onItemKey(event, index)}
-            ></textarea>
-          </div>
-        {/each}
-        <button class="add-check" onclick={() => addItem(items.length)}>
-          <Icon name="plus" size={21} />
-          <span>Ajouter un élément</span>
-        </button>
-      </div>
-    {/if}
+    <div
+      class="note-body"
+      contenteditable="true"
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Contenu de la note"
+      tabindex="0"
+      spellcheck="false"
+      data-placeholder="Écrivez quelque chose…"
+      bind:this={bodyEl}
+      use:initBody
+      oninput={onBodyInput}
+      onfocus={startEditing}
+      onkeydown={onBodyKeydown}
+      onclick={onBodyClick}
+    ></div>
   </div>
 
   {#if editing}
     <div class="edit-tools">
-      <button class="tool-btn" onclick={() => toast.show('Notes vocales bientôt disponibles')} aria-label="Note vocale">
-        <Icon name="waveform" size={25} />
-      </button>
-      <button class="tool-btn" onclick={pickImage} aria-label="Insérer une image">
-        <Icon name="image" size={25} />
-      </button>
-      <button class="tool-btn" onclick={() => toast.show('Dessin bientôt disponible')} aria-label="Dessiner">
-        <Icon name="draw" size={25} />
-      </button>
-      <button
-        class="tool-btn"
-        class:active={kind === 'checklist'}
-        onclick={convertKind}
-        aria-label="Liste de cases à cocher"
-      >
-        <Icon name="check-square" size={25} />
-      </button>
-      {#if kind === 'text'}
-        <button class="tool-btn" onclick={() => (sheet = 'format')} aria-label="Mise en forme">
+      {#if formatOpen}
+        <div class="format-bar">
+          <button
+            class="fmt-tool"
+            class:active={format.highlight}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={toggleHighlight}
+            aria-label="Surligner"
+          >
+            <Icon name="highlighter" size={22} />
+          </button>
+          <button
+            class="fmt-tool"
+            class:active={format.h1}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={() => toggleHeading(1)}
+            aria-label="Titre 1"
+          >
+            <span class="hglyph">H1</span>
+          </button>
+          <button
+            class="fmt-tool"
+            class:active={format.h2}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={() => toggleHeading(2)}
+            aria-label="Titre 2"
+          >
+            <span class="hglyph">H2</span>
+          </button>
+          <button
+            class="fmt-tool"
+            class:active={format.h3}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={() => toggleHeading(3)}
+            aria-label="Titre 3"
+          >
+            <span class="hglyph">H3</span>
+          </button>
+          <button
+            class="fmt-tool"
+            class:active={format.bold}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={toggleBold}
+            aria-label="Gras"
+          >
+            <span class="glyph bold">B</span>
+          </button>
+          <button
+            class="fmt-tool"
+            class:active={format.italic}
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={toggleItalic}
+            aria-label="Italique"
+          >
+            <span class="glyph italic">I</span>
+          </button>
+          <button
+            class="fmt-tool"
+            onpointerdown={(event) => event.preventDefault()}
+            onclick={clearFormat}
+            aria-label="Effacer la mise en forme"
+          >
+            <Icon name="close" size={20} />
+          </button>
+        </div>
+      {:else}
+        <button
+          class="tool-btn"
+          onclick={() => toast.show('Notes vocales bientôt disponibles')}
+          aria-label="Note vocale"
+        >
+          <Icon name="waveform" size={25} />
+        </button>
+        <button class="tool-btn" onclick={pickImage} aria-label="Insérer une image">
+          <Icon name="image" size={25} />
+        </button>
+        <button
+          class="tool-btn"
+          onclick={() => toast.show('Dessin bientôt disponible')}
+          aria-label="Dessiner"
+        >
+          <Icon name="draw" size={25} />
+        </button>
+        <button
+          class="tool-btn"
+          onpointerdown={(event) => event.preventDefault()}
+          onclick={toggleTaskLine}
+          aria-label="Liste de contrôle"
+        >
+          <Icon name="check-square" size={25} />
+        </button>
+        <button
+          class="tool-btn"
+          class:active={formatOpen}
+          onpointerdown={(event) => event.preventDefault()}
+          onclick={() => {
+            ensureFocus();
+            formatOpen = true;
+            refreshFormat();
+          }}
+          aria-label="Mise en forme"
+        >
           <Icon name="t" size={25} />
         </button>
       {/if}
@@ -506,69 +571,9 @@
   <Sheet
     open={sheet !== null}
     onclose={() => (sheet = null)}
-    title={sheet === 'format'
-      ? 'Mise en forme'
-      : sheet === 'color'
-        ? 'Couleur de la note'
-        : sheet === 'folder'
-          ? 'Dossier'
-          : ''}
+    title={sheet === 'color' ? 'Couleur de la note' : sheet === 'folder' ? 'Dossier' : ''}
   >
-    {#if sheet === 'format'}
-      <div class="fmt-grid">
-        <button class="fmt-btn" onclick={() => exec('bold')} onpointerdown={(e) => e.preventDefault()}>
-          <span class="glyph bold">B</span><span>Gras</span>
-        </button>
-        <button class="fmt-btn" onclick={() => exec('italic')} onpointerdown={(e) => e.preventDefault()}>
-          <span class="glyph italic">I</span><span>Italique</span>
-        </button>
-        <button class="fmt-btn" onclick={() => exec('underline')} onpointerdown={(e) => e.preventDefault()}>
-          <span class="glyph underline">U</span><span>Souligné</span>
-        </button>
-        <button
-          class="fmt-btn"
-          onclick={() => exec('strikeThrough')}
-          onpointerdown={(e) => e.preventDefault()}
-        >
-          <span class="glyph strike">S</span><span>Barré</span>
-        </button>
-        <button
-          class="fmt-btn"
-          onclick={() => exec('hiliteColor', '#FFB300')}
-          onpointerdown={(e) => e.preventDefault()}
-        >
-          <Icon name="highlighter" size={21} /><span>Surligner</span>
-        </button>
-        <button
-          class="fmt-btn"
-          onclick={() => exec('formatBlock', 'H2')}
-          onpointerdown={(e) => e.preventDefault()}
-        >
-          <span class="glyph">H</span><span>Titre</span>
-        </button>
-        <button
-          class="fmt-btn"
-          onclick={() => exec('insertUnorderedList')}
-          onpointerdown={(e) => e.preventDefault()}
-        >
-          <Icon name="list-bullet" size={21} /><span>Puces</span>
-        </button>
-        <button
-          class="fmt-btn"
-          onclick={() => exec('insertOrderedList')}
-          onpointerdown={(e) => e.preventDefault()}
-        >
-          <Icon name="list-number" size={21} /><span>Numéros</span>
-        </button>
-        <button
-          class="fmt-btn"
-          onclick={() => exec('removeFormat')}
-          onpointerdown={(e) => e.preventDefault()}
-        >
-          <Icon name="clear-format" size={21} /><span>Effacer</span>
-        </button>
-      </div>
-    {:else if sheet === 'more'}
+    {#if sheet === 'more'}
       <button class="sheet-row" onclick={togglePin}>
         <Icon name={note.pinned ? 'pin-filled' : 'pin'} size={22} />
         <span class="grow">{note.pinned ? 'Désépingler' : 'Épingler'}</span>
@@ -580,12 +585,6 @@
       <button class="sheet-row" onclick={duplicateNote}>
         <Icon name="copy" size={22} />
         <span class="grow">Dupliquer</span>
-      </button>
-      <button class="sheet-row" onclick={convertKind}>
-        <Icon name={kind === 'text' ? 'checklist' : 'text'} size={22} />
-        <span class="grow">
-          {kind === 'text' ? 'Convertir en liste' : 'Convertir en note'}
-        </span>
       </button>
       <button class="sheet-row danger" onclick={removeNote}>
         <Icon name="trash" size={22} />
@@ -637,7 +636,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: calc(var(--safe-top) + 4px) 8px 0;
+    padding: calc(var(--safe-top) + 4px) 8px 0 14px;
   }
 
   .bar-right {
@@ -650,13 +649,13 @@
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 0 22px 40px;
+    padding: 0 24px 40px;
   }
 
   .note-title {
     display: block;
     width: 100%;
-    margin: 6px 0 0;
+    margin: 28px 0 0;
     padding: 0;
     border: 0;
     background: transparent;
@@ -664,7 +663,7 @@
     font-size: var(--note-title);
     font-weight: 700;
     letter-spacing: -0.5px;
-    line-height: 1.24;
+    line-height: 1.2;
     color: var(--text);
   }
 
@@ -676,7 +675,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-top: 12px;
+    margin-top: 7px;
     font-size: 14px;
     color: var(--text-3);
   }
@@ -686,11 +685,11 @@
   }
 
   .note-body {
-    margin-top: 22px;
+    margin-top: 28px;
     min-height: 40vh;
     outline: none;
     font-size: var(--note-text);
-    line-height: 1.62;
+    line-height: 1.58;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
   }
@@ -701,6 +700,10 @@
     pointer-events: none;
   }
 
+  .note-body :global(div + div) {
+    margin-top: 10px;
+  }
+
   .note-body :global(img) {
     display: block;
     max-width: 100%;
@@ -709,89 +712,60 @@
     border-radius: 14px;
   }
 
-  .note-body :global(h2) {
-    font-size: calc(var(--note-text) + 3px);
-    line-height: 1.4;
-    margin: 18px 0 4px;
+  .note-body :global(h1) {
+    font-size: calc(var(--note-text) + 8px);
+    line-height: 1.35;
+    margin: 16px 0 4px;
     font-weight: 700;
   }
 
-  .note-body :global(ul),
-  .note-body :global(ol) {
-    padding-left: 24px;
-    margin: 8px 0;
+  .note-body :global(h2) {
+    font-size: calc(var(--note-text) + 5px);
+    line-height: 1.35;
+    margin: 14px 0 4px;
+    font-weight: 700;
   }
 
-  .checklist {
-    margin-top: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  .note-body :global(h3) {
+    font-size: calc(var(--note-text) + 2px);
+    line-height: 1.35;
+    margin: 12px 0 4px;
+    font-weight: 700;
   }
 
-  .check-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    padding: 7px 0;
+  .note-body :global(.task-line) {
+    position: relative;
+    padding-left: 30px;
+    min-height: 1.55em;
   }
 
-  .check-box {
-    flex: 0 0 auto;
-    width: 25px;
-    height: 25px;
-    margin-top: 3px;
-    border-radius: 7px;
+  .note-body :global(.task-line::before) {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.42em;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
     border: 2px solid var(--text-3);
-    display: grid;
-    place-items: center;
-    color: #fff;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease,
-      transform 0.12s ease;
+    box-sizing: border-box;
   }
 
-  .check-box:active {
-    transform: scale(0.9);
+  .note-body :global(.task-line[data-checked='true']::before) {
+    background: var(--text);
+    border-color: var(--text);
   }
 
-  .check-row.done .check-box {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
-  .check-input {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    outline: none;
-    resize: none;
-    overflow: hidden;
-    font-size: var(--note-text);
-    line-height: 1.45;
-    color: var(--text);
-  }
-
-  .check-row.done .check-input {
-    color: var(--text-3);
-    text-decoration: line-through;
-  }
-
-  .add-check {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 0 6px;
-    color: var(--text-3);
-    font-size: 16px;
-  }
-
-  .add-check:active {
-    color: var(--accent);
+  .note-body :global(.task-line[data-checked='true']::after) {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 0.72em;
+    width: 8px;
+    height: 4px;
+    border-left: 2.2px solid var(--bg);
+    border-bottom: 2.2px solid var(--bg);
+    transform: rotate(-45deg);
   }
 
   .edit-tools {
@@ -802,7 +776,6 @@
     gap: 4px;
     padding: 6px 8px calc(8px + var(--safe-bottom));
     background: var(--surface-2);
-    border-top: 1px solid var(--line);
   }
 
   .tool-btn {
@@ -822,44 +795,45 @@
     color: var(--accent);
   }
 
-  .file-input {
-    display: none;
-  }
-
-  :global(.check) {
-    color: var(--accent);
-  }
-
-  .fmt-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    padding: 2px 8px 10px;
-  }
-
-  .fmt-btn {
-    height: 64px;
-    border-radius: 14px;
-    background: var(--surface-2);
+  .format-bar {
+    flex: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 3px;
-    font-size: 11px;
-    color: var(--text-2);
+    justify-content: space-between;
+    gap: 2px;
   }
 
-  .fmt-btn:active {
-    background: var(--accent-soft);
+  .fmt-tool {
+    flex: 1;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--text);
+  }
+
+  .fmt-tool:active {
+    background: var(--surface-3);
+  }
+
+  .fmt-tool.active {
     color: var(--accent);
+  }
+
+  .hglyph {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
   }
 
   .glyph {
-    font-size: 17px;
-    font-weight: 800;
+    font-size: 19px;
+    font-weight: 700;
     line-height: 1;
-    color: var(--text);
+  }
+
+  .glyph.bold {
+    font-weight: 800;
   }
 
   .glyph.italic {
@@ -868,12 +842,12 @@
     font-weight: 600;
   }
 
-  .glyph.underline {
-    text-decoration: underline;
+  .file-input {
+    display: none;
   }
 
-  .glyph.strike {
-    text-decoration: line-through;
+  :global(.check) {
+    color: var(--accent);
   }
 
   .colors {

@@ -11,17 +11,17 @@
     transition:fade={{ duration: 140 }}
   ></button>
   <div
-    class="sheet confirm-sheet"
+    class="confirm"
     role="alertdialog"
     aria-modal="true"
-    aria-label={confirmStore.message}
-    transition:fly={{ y: 70, duration: 250, opacity: 0.4 }}
+    aria-label={confirmStore.title}
+    transition:fly={{ y: 60, duration: 230, opacity: 0.4 }}
   >
-    <div class="sheet-handle"></div>
-    <p class="confirm-text">{confirmStore.message}</p>
-    <div class="confirm-actions">
-      <button class="confirm-btn" onclick={() => confirmStore.answer(false)}>Annuler</button>
-      <button class="confirm-btn danger" onclick={() => confirmStore.answer(true)}>
+    <h2>{confirmStore.title}</h2>
+    <p>{confirmStore.message}</p>
+    <div class="buttons">
+      <button class="btn" onclick={() => confirmStore.answer(false)}>Annuler</button>
+      <button class="btn danger" onclick={() => confirmStore.answer(true)}>
         {confirmStore.confirmLabel}
       </button>
     </div>
@@ -29,39 +29,55 @@
 {/if}
 
 <style>
-  .confirm-sheet {
-    padding: 0 10px calc(12px + var(--safe-bottom));
+  .confirm {
+    position: fixed;
+    left: 26px;
+    right: 26px;
+    bottom: calc(78px + var(--safe-bottom));
+    z-index: 41;
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 22px 22px 18px;
+    border-radius: 26px;
+    background: #2c2c2e;
+    color: #fff;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
   }
 
-  .confirm-text {
+  h2 {
     margin: 0;
-    padding: 16px 16px 6px;
-    font-size: 16px;
-    line-height: 1.45;
-    color: var(--text);
-  }
-
-  .confirm-actions {
-    display: flex;
-    gap: 8px;
-    padding: 10px 6px 2px;
-  }
-
-  .confirm-btn {
-    flex: 1;
-    height: 48px;
-    border-radius: 14px;
-    background: var(--surface-2);
-    font-size: 16px;
+    text-align: center;
+    font-size: 19px;
     font-weight: 600;
   }
 
-  .confirm-btn:active {
-    opacity: 0.75;
+  p {
+    margin: 12px 0 20px;
+    text-align: center;
+    font-size: 16px;
+    color: #c7c7cc;
   }
 
-  .confirm-btn.danger {
-    background: rgba(229, 72, 77, 0.14);
-    color: var(--danger);
+  .buttons {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn {
+    flex: 1;
+    height: 50px;
+    border-radius: 16px;
+    background: #3a3a3c;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .btn:active {
+    opacity: 0.8;
+  }
+
+  .btn.danger {
+    color: #ff453a;
   }
 </style>

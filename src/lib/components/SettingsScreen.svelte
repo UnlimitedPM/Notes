@@ -5,7 +5,15 @@
   import type { LayoutKey, SortKey, TextSizeKey, ThemeKey } from '../types';
   import { toast } from '../toast.svelte';
 
-  type SheetName = 'size' | 'sort' | 'layout' | 'theme' | 'cloud' | null;
+  type SheetName =
+    | 'size'
+    | 'sort'
+    | 'layout'
+    | 'theme'
+    | 'cloud'
+    | 'quick'
+    | 'privacy'
+    | null;
 
   interface Props {
     onclose: () => void;
@@ -15,6 +23,7 @@
   let { onclose, ontrash }: Props = $props();
 
   let sheet = $state<SheetName>(null);
+  let scrolled = $state(false);
 
   const sizeLabels: Record<TextSizeKey, string> = {
     small: 'Petite',
@@ -61,25 +70,32 @@
 </script>
 
 <div class="settings">
-  <header class="settings-head">
+  <header class="settings-head" class:compact={scrolled}>
     <button class="icon-btn" onclick={onclose} aria-label="Retour">
-      <Icon name="back" size={25} />
+      <Icon name="back" size={24} />
     </button>
+    <span class="compact-title">Notes</span>
   </header>
 
-  <div class="settings-scroll">
+  <div
+    class="settings-scroll"
+    onscroll={(event) => (scrolled = event.currentTarget.scrollTop > 40)}
+  >
     <h1 class="screen-title">Notes</h1>
 
     <div class="section">Services Cloud</div>
     <button class="row" onclick={() => (sheet = 'cloud')}>
-      <span class="label">Cloud personnel</span>
+      <span class="label">Xiaomi Cloud</span>
       <span class="value">Bientôt disponible</span>
       <Icon name="chevron-right" size={20} class="chev" />
     </button>
-    <div class="row disabled">
-      <span class="label">Supprimer les notes du cloud</span>
+    <button
+      class="row disabled"
+      onclick={() => toast.show('Aucune donnée dans le cloud')}
+    >
+      <span class="label">Supprimer les notes dans le cloud</span>
       <Icon name="chevron-right" size={20} class="chev" />
-    </div>
+    </button>
 
     <div class="divider"></div>
     <div class="section">Style</div>
@@ -101,16 +117,10 @@
 
     <div class="divider"></div>
     <div class="section">Fonctionnalités rapides</div>
-    <div class="row">
-      <span class="label grow">Notes rapides</span>
-      <button
-        class="switch"
-        class:on={notesStore.quickNotes}
-        onclick={() => notesStore.setQuickNotes(!notesStore.quickNotes)}
-        aria-label="Notes rapides"
-        aria-pressed={notesStore.quickNotes}
-      ></button>
-    </div>
+    <button class="row" onclick={() => (sheet = 'quick')}>
+      <span class="label">Notes rapides</span>
+      <Icon name="chevron-right" size={20} class="chev" />
+    </button>
 
     <div class="divider"></div>
     <div class="section">Rappels</div>
@@ -129,30 +139,44 @@
     </div>
 
     <div class="divider"></div>
-    <div class="section">Apparence</div>
-    <button class="row" onclick={() => (sheet = 'theme')}>
-      <span class="label">Thème</span>
-      <span class="value">{themeLabels[notesStore.theme]}</span>
-      <Icon name="updown" size={19} class="chev" />
+    <div class="section upper">AUTRE</div>
+    <button class="row" onclick={() => (sheet = 'privacy')}>
+      <span class="label">Politique de Confidentialité</span>
+      <Icon name="chevron-right" size={20} class="chev" />
     </button>
-
-    <div class="divider"></div>
-    <div class="section">Données</div>
     <button class="row" onclick={ontrash}>
       <span class="label">Corbeille</span>
       <span class="value">{notesStore.trash.length || ''}</span>
       <Icon name="chevron-right" size={20} class="chev" />
+    </button>
+    <div class="row">
+      <div class="row-text">
+        <span class="label">Afficher les notes masquées</span>
+        <span class="sub">
+          {notesStore.hiddenCount} note{notesStore.hiddenCount > 1 ? 's' : ''} masquée{notesStore.hiddenCount > 1 ? 's' : ''}
+        </span>
+      </div>
+      <button
+        class="switch"
+        class:on={notesStore.showHidden}
+        onclick={() => notesStore.setShowHidden(!notesStore.showHidden)}
+        aria-label="Afficher les notes masquées"
+        aria-pressed={notesStore.showHidden}
+      ></button>
+    </div>
+    <button class="row" onclick={() => (sheet = 'theme')}>
+      <span class="label">Thème</span>
+      <span class="value">{themeLabels[notesStore.theme]}</span>
+      <Icon name="updown" size={19} class="chev" />
     </button>
     <button class="row" onclick={exportNotes}>
       <span class="label">Exporter les notes</span>
       <span class="value">JSON</span>
       <Icon name="chevron-right" size={20} class="chev" />
     </button>
-
-    <div class="divider"></div>
     <div class="row plain">
       <span class="label">Version</span>
-      <span class="value">0.2.0</span>
+      <span class="value">0.3.0</span>
     </div>
   </div>
 
@@ -167,7 +191,11 @@
           ? 'Disposition'
           : sheet === 'theme'
             ? 'Thème'
-            : 'Cloud personnel'}
+            : sheet === 'quick'
+              ? 'Notes rapides'
+              : sheet === 'privacy'
+                ? 'Politique de Confidentialité'
+                : 'Xiaomi Cloud'}
   >
     {#if sheet === 'size'}
       {#each sizeOptions as option (option)}
@@ -197,15 +225,37 @@
           {#if notesStore.theme === option}<Icon name="check" size={20} class="check" />{/if}
         </button>
       {/each}
-    {:else if sheet === 'cloud'}
-      <div class="cloud-note">
+    {:else if sheet === 'quick'}
+      <div class="text-block">
+        <p>Créez une note en un geste depuis l’écran d’accueil ou l’écran verrouillé.</p>
+      </div>
+      <div class="row">
+        <span class="label grow">Activer les notes rapides</span>
+        <button
+          class="switch"
+          class:on={notesStore.quickNotes}
+          onclick={() => notesStore.setQuickNotes(!notesStore.quickNotes)}
+          aria-label="Activer les notes rapides"
+          aria-pressed={notesStore.quickNotes}
+        ></button>
+      </div>
+    {:else if sheet === 'privacy'}
+      <div class="text-block">
         <p>
-          La synchronisation auto-hébergée arrive dans une prochaine version : un petit serveur
-          à vous, compatible téléphone et ordinateur, sans compte chez un tiers.
+          Vos notes sont stockées uniquement sur cet appareil (IndexedDB). Aucune donnée n’est
+          envoyée à un serveur, aucun compte n’est requis, aucun traqueur n’est chargé.
         </p>
-        <p class="cloud-hint">
-          En attendant, vos notes restent uniquement sur cet appareil (stockage local).
+        <p class="hint">
+          La future synchronisation sera auto-hébergée : vous choisirez votre propre serveur.
         </p>
+      </div>
+    {:else if sheet === 'cloud'}
+      <div class="text-block">
+        <p>
+          La synchronisation auto-hébergée arrive dans une prochaine version : un petit serveur à
+          vous, compatible téléphone et ordinateur, sans compte chez un tiers.
+        </p>
+        <p class="hint">En attendant, vos notes restent uniquement sur cet appareil.</p>
       </div>
     {/if}
   </Sheet>
@@ -221,9 +271,30 @@
   }
 
   .settings-head {
+    position: relative;
+    z-index: 5;
     display: flex;
     align-items: center;
-    padding: calc(var(--safe-top) + 4px) 8px 0;
+    padding: calc(var(--safe-top) + 2px) 10px 0 8px;
+    min-height: calc(var(--safe-top) + 46px);
+    background: var(--bg);
+  }
+
+  .compact-title {
+    position: absolute;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+  }
+
+  .settings-head.compact .compact-title {
+    opacity: 1;
   }
 
   .settings-scroll {
@@ -234,22 +305,26 @@
   }
 
   .settings-scroll .screen-title {
-    padding-top: 18px;
-    padding-bottom: 8px;
+    padding-top: 26px;
+    padding-bottom: 6px;
   }
 
   .section {
-    padding: 26px 20px 10px;
-    font-size: 14.5px;
+    padding: 26px 26px 10px;
+    font-size: 15px;
     color: var(--text-3);
+  }
+
+  .section.upper {
+    letter-spacing: 0.05em;
   }
 
   .row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     width: 100%;
-    padding: 16px 20px;
+    padding: 15px 26px;
     text-align: left;
     color: var(--text);
   }
@@ -259,7 +334,7 @@
   }
 
   .row.disabled {
-    opacity: 0.4;
+    opacity: 0.45;
   }
 
   .row .label {
@@ -275,13 +350,10 @@
   .row .value {
     margin-left: auto;
     font-size: 15px;
+    line-height: 1.25;
     color: var(--text-3);
     text-align: right;
-    max-width: 55%;
-  }
-
-  .row .label + .value {
-    padding-left: 12px;
+    max-width: 52%;
   }
 
   :global(.chev) {
@@ -291,7 +363,7 @@
 
   .divider {
     height: 1px;
-    margin: 6px 20px;
+    margin: 8px 26px;
     background: var(--line);
   }
 
@@ -320,18 +392,18 @@
     color: var(--accent);
   }
 
-  .cloud-note {
-    padding: 8px 20px 18px;
+  .text-block {
+    padding: 6px 22px 18px;
     color: var(--text-2);
     font-size: 15px;
     line-height: 1.55;
   }
 
-  .cloud-note p {
+  .text-block p {
     margin: 0 0 12px;
   }
 
-  .cloud-hint {
+  .hint {
     color: var(--text-3);
     font-size: 14px;
   }
