@@ -54,7 +54,7 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 npm install
 npm run dev        # http://localhost:5173 (exposé sur le réseau local)
 npm run check      # types + lint Svelte
-npm test           # 59 tests (vitest + jsdom + fake-indexeddb)
+npm test           # 63 tests (vitest + jsdom + fake-indexeddb)
 npm run build
 npm run preview
 ```

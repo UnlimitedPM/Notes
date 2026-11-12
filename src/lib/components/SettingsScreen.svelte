@@ -6,7 +6,6 @@
   import type { LayoutKey, SortKey, TextSizeKey, ThemeKey } from '../types';
   import { toast } from '../toast.svelte';
   import pkg from '../../../package.json';
-  import { TEST_PAYLOAD } from '../testFixtures';
 
   type SheetName =
     | 'size'
@@ -84,6 +83,8 @@
       'Charger'
     );
     if (!ok) return;
+    // import dynamique : la base de test ne part jamais dans le bundle de prod
+    const { TEST_PAYLOAD } = await import('../testFixtures');
     await notesStore.purgeEverything();
     notesStore.folders = [];
     notesStore.taskList = [];
