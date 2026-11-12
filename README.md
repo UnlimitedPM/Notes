@@ -61,6 +61,25 @@ npm run preview
 
 `dist/` est statique. L'installation PWA exige HTTPS (sauf localhost).
 
+## Serveur de synchronisation (optionnel)
+
+`server/` contient l'API auto-hébergeable (Fastify + SQLite + OIDC Keycloak) qui
+permettra de retrouver les mêmes notes sur plusieurs appareils :
+notes en Markdown, pièces jointes en fichiers, pierres tombales pour les suppressions,
+détection de conflits par `updatedAt`.
+
+```bash
+cd server
+cp .env.example .env      # OIDC_ISSUER + OIDC_CLIENT_ID
+npm install
+npm run dev               # http://localhost:8080
+npm test                  # 18 tests
+```
+
+Détails (routes, configuration Keycloak, Docker, sauvegardes) : `docs/SERVEUR.md`.
+La PWA n'est pas encore branchée dessus : connexion OIDC, moteur de synchro et bascule
+du stockage en Markdown restent à faire.
+
 ## Tests
 
 ```

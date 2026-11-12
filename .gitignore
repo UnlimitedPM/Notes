@@ -10,3 +10,9 @@ shots/
 
 captures/
 
+# serveur
+server/data
+server/.env
+server/dist
+.env
+
