@@ -6,6 +6,8 @@
   import type { LayoutKey, SortKey, TextSizeKey, ThemeKey } from '../types';
   import { toast } from '../toast.svelte';
   import pkg from '../../../package.json';
+  import { syncStore } from '../sync.svelte';
+  import { beginLogin, readConfig, readSession, writeConfig, type CloudConfig } from '../cloud/oidc';
 
   type SheetName =
     | 'size'
@@ -28,6 +30,46 @@
   let scrolled = $state(false);
   let fileInput = $state<HTMLInputElement | null>(null);
   const devMode = import.meta.env.DEV;
+
+  // --- Synchronisation ---------------------------------------------------
+  const savedConfig = readConfig();
+  let serverUrl = $state(savedConfig?.serverUrl ?? '');
+  let issuer = $state(savedConfig?.issuer ?? '');
+  let clientId = $state(savedConfig?.clientId ?? '');
+  let connecting = $state(false);
+  let session = $state(readSession());
+
+  async function connect() {
+    const config: CloudConfig = {
+      serverUrl: serverUrl.trim().replace(/\/+$/, ''),
+      issuer: issuer.trim().replace(/\/+$/, ''),
+      clientId: clientId.trim()
+    };
+    if (!config.serverUrl || !config.issuer || !config.clientId) {
+      toast.show('Renseigne les trois champs');
+      return;
+    }
+    connecting = true;
+    try {
+      writeConfig(config);
+      await beginLogin(config);
+    } catch (error) {
+      connecting = false;
+      toast.show(error instanceof Error ? error.message : 'Connexion impossible');
+    }
+  }
+
+  async function disconnect() {
+    await syncStore.signOut();
+    session = null;
+    toast.show('Déconnecté');
+  }
+
+  async function syncNow() {
+    await syncStore.syncNow();
+    session = readSession();
+    toast.show(syncStore.error ? `Échec : ${syncStore.error}` : 'Synchronisé');
+  }
 
   // Injectée par vite.config.ts (`define`) depuis package.json.
   const appVersion = pkg.version;
@@ -130,10 +172,16 @@
 
     <div class="section">Services Cloud</div>
     <button class="row" onclick={() => (sheet = 'cloud')}>
-      <span class="label">Xiaomi Cloud</span>
-      <span class="value">Bientôt disponible</span>
+      <span class="label">Synchronisation</span>
+      <span class="value">{syncStore.label}</span>
       <Icon name="chevron-right" size={20} class="chev" />
     </button>
+    {#if syncStore.configured}
+      <button class="row" onclick={() => void syncNow()}>
+        <span class="label">Synchroniser maintenant</span>
+        <Icon name="restore" size={20} class="chev" />
+      </button>
+    {/if}
     <button
       class="row disabled"
       onclick={() => toast.show('Aucune donnée dans le cloud')}
@@ -259,7 +307,7 @@
               ? 'Notes rapides'
               : sheet === 'privacy'
                 ? 'Politique de Confidentialité'
-                : 'Xiaomi Cloud'}
+                : 'Synchronisation'}
   >
     {#if sheet === 'size'}
       {#each sizeOptions as option (option)}
@@ -306,21 +354,66 @@
     {:else if sheet === 'privacy'}
       <div class="text-block">
         <p>
-          Vos notes sont stockées uniquement sur cet appareil (IndexedDB). Aucune donnée n’est
-          envoyée à un serveur, aucun compte n’est requis, aucun traqueur n’est chargé.
+          Vos notes sont stockées sur cet appareil (IndexedDB). Aucun compte n'est requis, aucun
+          traqueur n'est chargé, rien n'est envoyé tant que la synchronisation n'est pas activée.
         </p>
         <p class="hint">
-          La future synchronisation sera auto-hébergée : vous choisirez votre propre serveur.
+          Si vous activez la synchronisation, les notes partent uniquement vers <em>votre</em>
+          serveur, avec votre compte Keycloak. Les notes sont stockées en Markdown.
         </p>
       </div>
     {:else if sheet === 'cloud'}
-      <div class="text-block">
-        <p>
-          La synchronisation auto-hébergée arrive dans une prochaine version : un petit serveur à
-          vous, compatible téléphone et ordinateur, sans compte chez un tiers.
-        </p>
-        <p class="hint">En attendant, vos notes restent uniquement sur cet appareil.</p>
-      </div>
+      {#if session}
+        <div class="text-block">
+          <p>
+            Connecté{session.email ? ` en tant que ${session.email}` : ''}.
+            {#if syncStore.pending > 0}
+              {syncStore.pending} note{syncStore.pending > 1 ? 's' : ''} en attente.
+            {:else}
+              Tout est synchronisé.
+            {/if}
+          </p>
+          <p class="hint">Serveur : {savedConfig?.serverUrl ?? '—'}</p>
+        </div>
+        <button class="sheet-row" onclick={() => void syncNow()}>
+          <Icon name="restore" size={22} />
+          <span class="grow">Synchroniser maintenant</span>
+        </button>
+        <button class="sheet-row danger" onclick={() => void disconnect()}>
+          <Icon name="close" size={22} />
+          <span class="grow">Se déconnecter</span>
+        </button>
+      {:else}
+        <div class="text-block">
+          <p>
+            Tes notes restent sur l'appareil <strong>et</strong> se synchronisent avec ton propre
+            serveur via ton compte Keycloak.
+          </p>
+        </div>
+        <div class="cloud-form">
+          <label>
+            <span>URL du serveur</span>
+            <input type="url" bind:value={serverUrl} placeholder="https://notes.example.com" />
+          </label>
+          <label>
+            <span>Issuer Keycloak</span>
+            <input
+              type="url"
+              bind:value={issuer}
+              placeholder="https://sso.example.com/realms/perso"
+            />
+          </label>
+          <label>
+            <span>Client ID</span>
+            <input type="text" bind:value={clientId} placeholder="notes-pwa" />
+          </label>
+        </div>
+        <button class="sheet-row" onclick={() => void connect()} disabled={connecting}>
+          <Icon name="cloud" size={22} />
+          <span class="grow">{connecting ? 'Redirection…' : 'Se connecter avec Keycloak'}</span>
+        </button>
+      {/if}
+      <button class="sheet-cancel" onclick={() => (sheet = null)}>Fermer</button>
     {/if}
   </Sheet>
 </div>
@@ -474,5 +567,31 @@
   .hint {
     color: var(--text-3);
     font-size: 14px;
+  }
+
+  .cloud-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 4px 22px 16px;
+  }
+
+  .cloud-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-3);
+  }
+
+  .cloud-form input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 15px;
+    border: 0;
+    outline: none;
   }
 </style>

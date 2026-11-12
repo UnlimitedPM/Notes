@@ -10,6 +10,8 @@ import type {
 } from './types';
 import { deleteAllNotes, deleteNote, loadAllNotes, saveNote, saveNotes } from './db';
 import { plainText } from './format';
+import { htmlToMarkdown } from './markdown';
+import { mdToHtml } from './md';
 import { parseTasks, taskLineHtml } from './tasks';
 
 export function uid(): string {
@@ -255,6 +257,110 @@ class NotesStore {  notes = $state<Note[]>([]);
   showHidden = $state(readBool('notes:showHidden', false));
 
   private started = false;
+  private applyingRemote = false;
+  private changeListeners = new Set<(id: string, deleted: boolean) => void>();
+
+  /** Abonnement aux modifications locales (utilisé par le moteur de synchro). */
+  onChange(fn: (id: string, deleted: boolean) => void): () => void {
+    this.changeListeners.add(fn);
+    return () => this.changeListeners.delete(fn);
+  }
+
+  private emit(id: string, deleted: boolean): void {
+    if (this.applyingRemote) return;
+    for (const fn of this.changeListeners) fn(id, deleted);
+  }
+
+  byId(id: string): Note | undefined {
+    return this.notes.find((n) => n.id === id);
+  }
+
+  /** Recalcule le Markdown (forme canonique, envoyée au serveur et exportée). */
+  private withMarkdown(note: Note): Note {
+    try {
+      return { ...note, md: htmlToMarkdown(note.html ?? '') };
+    } catch {
+      return note;
+    }
+  }
+
+  /** Applique une note venue du serveur (Markdown → HTML de l'éditeur). */
+  async applyRemoteNote(remote: {
+    id: string;
+    title: string;
+    md: string;
+    color: string;
+    folderId: string | null;
+    pinned: boolean;
+    hidden: boolean;
+    remindAt: number | null;
+    createdAt: number;
+    updatedAt: number;
+  }): Promise<void> {
+    this.applyingRemote = true;
+    try {
+      const index = this.notes.findIndex((n) => n.id === remote.id);
+      const existing = index === -1 ? null : this.notes[index];
+      if (existing && existing.updatedAt > remote.updatedAt) return;
+
+      const note: Note = {
+        id: remote.id,
+        kind: 'text',
+        title: remote.title,
+        html: mdToHtml(remote.md ?? ''),
+        md: remote.md ?? '',
+        items: [],
+        color: COLOR_KEYS.includes(remote.color as NoteColorKey)
+          ? (remote.color as NoteColorKey)
+          : 'default',
+        pinned: !!remote.pinned,
+        folderId: remote.folderId ?? null,
+        hidden: !!remote.hidden,
+        remindAt: remote.remindAt ?? null,
+        tags: existing?.tags ?? [],
+        createdAt: remote.createdAt,
+        updatedAt: remote.updatedAt,
+        deletedAt: null
+      };
+
+      if (index === -1) this.notes.unshift(note);
+      else this.notes[index] = note;
+      await saveNote(note);
+    } finally {
+      this.applyingRemote = false;
+    }
+  }
+
+  /** Une note supprimée sur un autre appareil disparaît ici. */
+  async removeRemote(id: string): Promise<void> {
+    this.applyingRemote = true;
+    try {
+      this.notes = this.notes.filter((n) => n.id !== id);
+      await deleteNote(id);
+    } finally {
+      this.applyingRemote = false;
+    }
+  }
+
+  /** Conflit : notre version est gardée à part sous « (conflit) ». */
+  async keepLocalConflictCopy(note: Note): Promise<void> {
+    const now = Date.now();
+    const copy: Note = {
+      ...note,
+      id: uid(),
+      title: note.title ? `${note.title} (conflit)` : '(conflit)',
+      tags: [...note.tags],
+      pinned: false,
+      hidden: false,
+      remindAt: null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null
+    };
+    this.notes.unshift(copy);
+    await saveNote(copy);
+    this.emit(copy.id, false);
+  }
 
   get active(): Note[] {
     return this.notes.filter((n) => !n.deletedAt && (this.showHidden || !n.hidden));
@@ -400,8 +506,16 @@ class NotesStore {  notes = $state<Note[]>([]);
         this.taskList = [...this.taskList, ...extracted];
         this.persistTasks();
       }
+      // Le Markdown est la forme canonique (export, synchro) : on le remplit pour
+      // les notes créées avant son introduction.
+      const missingMd = kept.filter((note) => typeof note.md !== 'string');
+      if (missingMd.length) {
+        const filled = kept.map((note) => this.withMarkdown(note));
+        this.notes = filled;
+        await saveNotes(filled);
+      }
       if (extracted.length || kept.some((n, i) => n !== notes[i])) {
-        await saveNotes(kept);
+        await saveNotes(this.notes);
       }
     } catch (error) {
       console.error('Chargement des notes impossible', error);
@@ -440,8 +554,11 @@ class NotesStore {  notes = $state<Note[]>([]);
       ...patch
     };
     this.notes.unshift(note);
-    void saveNote(note);
-    return note;
+    const stored = this.withMarkdown(note);
+    this.notes[0] = stored;
+    void saveNote(stored);
+    this.emit(stored.id, false);
+    return stored;
   }
 
   async update(id: string, patch: Partial<Note>): Promise<void> {
@@ -449,8 +566,10 @@ class NotesStore {  notes = $state<Note[]>([]);
     if (index === -1) return;
     const next: Note = { ...this.notes[index], ...patch };
     if (!('updatedAt' in patch)) next.updatedAt = Date.now();
-    this.notes[index] = next;
-    await saveNote(next);
+    const stored = this.withMarkdown(next);
+    this.notes[index] = stored;
+    await saveNote(stored);
+    this.emit(id, stored.deletedAt !== null && stored.deletedAt !== undefined);
   }
 
   duplicate(note: Note): Note {
@@ -468,8 +587,11 @@ class NotesStore {  notes = $state<Note[]>([]);
       deletedAt: null
     };
     this.notes.unshift(copy);
-    void saveNote(copy);
-    return copy;
+    const stored = this.withMarkdown(copy);
+    this.notes[0] = stored;
+    void saveNote(stored);
+    this.emit(stored.id, false);
+    return stored;
   }
 
   addTask(text: string): TaskItem | null {
@@ -555,7 +677,13 @@ class NotesStore {  notes = $state<Note[]>([]);
       }
     }
     // IndexedDB d'abord, sinon un rechargement perdrait les notes importées
-    if (toSave.length) await saveNotes(toSave);
+    if (toSave.length) {
+      const stored = toSave.map((note) => this.withMarkdown(note));
+      toSave.length = 0;
+      toSave.push(...stored);
+      await saveNotes(stored);
+      for (const note of stored) this.emit(note.id, note.deletedAt !== null);
+    }
 
     let folders = 0;
     for (const item of importedFolders) {
@@ -623,11 +751,14 @@ class NotesStore {  notes = $state<Note[]>([]);
   purge(id: string): void {
     this.notes = this.notes.filter((n) => n.id !== id);
     void deleteNote(id);
+    this.emit(id, true);
   }
 
   emptyTrash(): void {
-    for (const note of this.trash) void deleteNote(note.id);
+    const removed = this.trash.map((n) => n.id);
+    for (const id of removed) void deleteNote(id);
     this.notes = this.notes.filter((n) => !n.deletedAt);
+    for (const id of removed) this.emit(id, true);
   }
 
   async purgeEverything(): Promise<void> {

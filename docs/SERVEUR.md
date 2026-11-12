@@ -85,10 +85,22 @@ Un cron quotidien + rétention suffit. Sans ça, un disque perdu = tout perdu.
 
 ## Ce qui reste à brancher côté PWA
 
-1. **Connexion OIDC** (Authorization Code + PKCE) dans les Réglages, stockage des jetons,
-   rafraîchissement silencieux.
-2. **Moteur de synchro** : outbox IndexedDB, push `PUT`/`DELETE`, pull `?since=`,
-   rejeu avec backoff, indicateur « Synchronisé / n en attente / Hors ligne ».
-3. **Markdown comme format de stockage** : le corps de note devient du Markdown en base,
-   l'éditeur convertit HTML ↔ Markdown à la frontière (test d'aller-retour), et les
-   images/audios passent en pièces jointes (`/v1/attachments/<hash>`) au lieu de `data:`.
+1. ✅ **Connexion OIDC** (Authorization Code + PKCE) : Réglages → Synchronisation.
+   Jetons en localStorage, rafraîchissement automatique avant expiration.
+2. ✅ **Moteur de synchro** : file d'attente IndexedDB (`outbox`), push `PUT`/`DELETE`,
+   pull `?since=` avec curseur persisté, rejeu, indicateur « Synchronisé / n en attente /
+   Hors ligne / Erreur », conflits conservés en copie « (conflit) ».
+3. ✅ **Markdown dans les données** : chaque note garde son `md` (recalculé à chaque
+   enregistrement) ; c'est lui qui part au serveur, celui qui est exporté, et celui qui
+   est re-rendu en HTML à l'arrivée. Aller-retour couvert par des tests
+   (`html → md → html → md` stable, notes vocales comprises).
+
+Reste à faire (incréments suivants) :
+
+- **Pièces jointes en fichiers** : les images/audios sont encore en `data:` dans le
+  Markdown. L'API `POST /v1/attachments` est prête ; il faut, à l'envoi, extraire les
+  `data:` URL, les téléverser et réécrire le Markdown avec `/v1/attachments/<hash>`.
+- **Dossiers et tâches** : les notes synchronisent leur `folderId`, mais les dossiers et
+  les tâches restent locaux (localStorage). L'API dossiers existe déjà.
+- **Suppression serveur** : « Supprimer les notes dans le cloud » n'est pas encore câblé.
+

@@ -49,7 +49,8 @@ describe('htmlToMarkdown', () => {
     expect(md).toContain('1. Première');
     expect(md).toContain('- [x] Tâche faite');
     expect(md).toContain('![](');
-    expect(md).not.toContain('<audio');
+    // les notes vocales sont conservées (elles étaient perdues avant)
+    expect(md).toContain('<audio src="data:audio/wav');
   });
 
   it('renvoie une chaîne vide pour du contenu vide', () => {

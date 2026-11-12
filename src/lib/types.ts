@@ -22,6 +22,11 @@ export interface Note {
   title: string;
   /** Contenu HTML (notes texte). */
   html: string;
+  /**
+   * Même contenu en Markdown : forme canonique pour l'export et la synchro.
+   * Recalculé à chaque enregistrement ; `html` reste la représentation de l'éditeur.
+   */
+  md?: string;
   /** Éléments (listes de cases à cocher). */
   items: ChecklistItem[];
   color: NoteColorKey;

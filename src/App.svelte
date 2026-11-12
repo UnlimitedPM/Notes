@@ -9,6 +9,8 @@
   import ConfirmDialog from './lib/components/ConfirmDialog.svelte';
   import { notesStore } from './lib/notes.svelte';
   import { startReminderWatcher } from './lib/reminders';
+  import { syncStore } from './lib/sync.svelte';
+  import { completeLogin, readConfig } from './lib/cloud/oidc';
 
   type Screen = 'home' | 'note' | 'settings' | 'trash' | 'folders';
 
@@ -36,8 +38,21 @@
   });
 
   onMount(() => {
-    void notesStore.init();
-    startReminderWatcher();
+    void (async () => {
+      // Retour de Keycloak : on échange le code avant tout le reste.
+      const config = readConfig();
+      if (config && new URLSearchParams(location.search).has('code')) {
+        try {
+          await completeLogin(config);
+        } catch (error) {
+          console.error('Connexion OIDC impossible', error);
+        }
+      }
+
+      await notesStore.init();
+      startReminderWatcher();
+      syncStore.start();
+    })();
 
     const onPop = () => {
       if (screen !== 'home') {

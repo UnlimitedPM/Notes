@@ -29,6 +29,10 @@ function inlineMarkdown(node: Node): string {
     const alt = el.getAttribute('alt') ?? '';
     return src ? `\n![${alt}](${src})\n` : '';
   }
+  if (tag === 'AUDIO') {
+    const src = el.getAttribute('src') ?? '';
+    return src ? `\n<audio src="${src}"></audio>\n` : '';
+  }
   if (tag === 'HR') return '\n---\n';
 
   const inner = Array.from(el.childNodes)
@@ -116,6 +120,9 @@ function blocksMarkdown(parent: Element): string {
     else if (tag === 'IMG') {
       const src = el.getAttribute('src') ?? '';
       if (src) push(`![](${src})`);
+    } else if (tag === 'AUDIO') {
+      const src = el.getAttribute('src') ?? '';
+      if (src) push(`<audio src="${src}"></audio>`);
     } else if (tag === 'HR') push('---');
     else if (el.querySelector('ul, ol, h1, h2, h3, div, p')) push(blocksMarkdown(el));
     else push(inlineMarkdown(el));

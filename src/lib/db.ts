@@ -1,8 +1,10 @@
 import type { Note } from './types';
 
 const DB_NAME = 'notes-app';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'notes';
+const OUTBOX = 'outbox';
+const META = 'meta';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -14,6 +16,12 @@ function openDb(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(OUTBOX)) {
+        db.createObjectStore(OUTBOX, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(META)) {
+        db.createObjectStore(META, { keyPath: 'key' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -78,3 +86,79 @@ export async function deleteAllNotes(): Promise<void> {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+// ---- File d'attente de synchronisation -------------------------------------
+
+export type OutboxEntry = {
+  /** identifiant de la note */
+  id: string;
+  /** true = suppression à propager */
+  deleted: boolean;
+  at: number;
+};
+
+export async function queueNote(id: string, deleted: boolean): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX, 'readwrite');
+    tx.objectStore(OUTBOX).put({ id, deleted, at: Date.now() } satisfies OutboxEntry);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadOutbox(): Promise<OutboxEntry[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX, 'readonly');
+    const request = tx.objectStore(OUTBOX).getAll();
+    request.onsuccess = () => resolve((request.result as OutboxEntry[]).map(plain));
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function dequeueNote(id: string): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX, 'readwrite');
+    tx.objectStore(OUTBOX).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function clearOutbox(): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OUTBOX, 'readwrite');
+    tx.objectStore(OUTBOX).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ---- Petites valeurs persistées (curseurs de synchro) ----------------------
+
+export async function readMeta<T>(key: string): Promise<T | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META, 'readonly');
+    const request = tx.objectStore(META).get(key);
+    request.onsuccess = () => {
+      const row = request.result as { key: string; value: unknown } | undefined;
+      resolve(row ? (row.value as T) : null);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function writeMeta(key: string, value: unknown): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META, 'readwrite');
+    tx.objectStore(META).put({ key, value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
