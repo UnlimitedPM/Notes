@@ -25,6 +25,7 @@ type Stored = {
 
 function fakeServer() {
   const notes = new Map<string, Stored>();
+  const attachments = new Map<string, { bytes: Uint8Array; mime: string }>();
   let clock = 1000;
 
   const handler = async (
@@ -38,6 +39,24 @@ function fakeServer() {
         status,
         headers: { 'content-type': 'application/json' }
       });
+
+    if (path === '/v1/attachments' && method === 'POST') {
+      const body = init.body as Blob;
+      const bytes = new Uint8Array(await body.arrayBuffer());
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      const hash = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      attachments.set(hash, { bytes, mime: body.type });
+      return json({ hash, mime: body.type, size: bytes.length, url: `/v1/attachments/${hash}` }, 201);
+    }
+
+    if (path.startsWith('/v1/attachments/')) {
+      const hash = path.replace('/v1/attachments/', '');
+      const file = attachments.get(hash);
+      if (!file) return json({ error: 'introuvable' }, 404);
+      return new Response(file.bytes, { status: 200, headers: { 'content-type': file.mime } });
+    }
 
     if (path.startsWith('/v1/notes?since=')) {
       const since = Number(new URLSearchParams(path.split('?')[1]).get('since') ?? 0);
@@ -91,7 +110,7 @@ function fakeServer() {
     return json({ error: 'route inconnue' }, 404);
   };
 
-  return { notes, handler };
+  return { notes, attachments, handler };
 }
 
 const config: CloudConfig = {
@@ -249,5 +268,58 @@ describe('synchronisation', () => {
 
     await syncStore.syncNow();
     expect(syncStore.pending).toBe(0);
+  });
+
+  it('téléverse les médias et les remplace par une pièce jointe', async () => {
+    const server = fakeServer();
+    syncStore.fetcher = server.handler;
+
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const note = notesStore.create(`<div><img src="${png}" alt="" /></div>`);
+    await syncStore.notifyLocalChange(note.id, false);
+
+    await syncStore.syncNow();
+
+    const stored = server.notes.get(note.id);
+    expect(stored?.md).toMatch(/\/v1\/attachments\/[a-f0-9]{64}/);
+    expect(stored?.md).not.toContain('data:image');
+    expect(server.attachments.size).toBe(1);
+  });
+
+  it('re-localise une pièce jointe distante en data: à la réception', async () => {
+    const server = fakeServer();
+    syncStore.fetcher = server.handler;
+
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    // le serveur a déjà la pièce jointe
+    const up = await server.handler(
+      config,
+      '/v1/attachments',
+      { method: 'POST', body: await (await fetch(png)).blob(), headers: { 'content-type': 'image/png' } }
+    );
+    const { url } = (await up.json()) as { url: string };
+
+    server.notes.set('avec-image', {
+      id: 'avec-image',
+      title: 'Image',
+      md: `![photo](${url})`,
+      color: 'default',
+      folderId: null,
+      pinned: false,
+      hidden: false,
+      remindAt: null,
+      createdAt: 1,
+      updatedAt: 2,
+      deleted: false,
+      serverUpdatedAt: 3
+    });
+
+    await syncStore.syncNow();
+
+    const local = notesStore.byId('avec-image');
+    expect(local?.html).toContain('src="data:image/png');
+    expect(local?.html).not.toContain('/v1/attachments/');
   });
 });

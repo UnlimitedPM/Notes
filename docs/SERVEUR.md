@@ -94,13 +94,15 @@ Un cron quotidien + rétention suffit. Sans ça, un disque perdu = tout perdu.
    enregistrement) ; c'est lui qui part au serveur, celui qui est exporté, et celui qui
    est re-rendu en HTML à l'arrivée. Aller-retour couvert par des tests
    (`html → md → html → md` stable, notes vocales comprises).
+4. ✅ **Pièces jointes en fichiers** : à l'envoi, chaque média `data:` est téléversé sur
+   `/v1/attachments` et remplacé par son URL dans le Markdown ; à la réception, l'URL
+   redevient un `data:` local (donc le rendu et le mode hors ligne ne changent pas).
 
 Reste à faire (incréments suivants) :
 
-- **Pièces jointes en fichiers** : les images/audios sont encore en `data:` dans le
-  Markdown. L'API `POST /v1/attachments` est prête ; il faut, à l'envoi, extraire les
-  `data:` URL, les téléverser et réécrire le Markdown avec `/v1/attachments/<hash>`.
 - **Dossiers et tâches** : les notes synchronisent leur `folderId`, mais les dossiers et
   les tâches restent locaux (localStorage). L'API dossiers existe déjà.
 - **Suppression serveur** : « Supprimer les notes dans le cloud » n'est pas encore câblé.
+- **Purge des pièces jointes** : rien ne supprime encore les fichiers orphelins (un
+  `DELETE /v1/notes/:id` laisse les médias sur le disque).
 

@@ -22,6 +22,20 @@ type RemoteNote = {
 const SINCES = 'sync:notes';
 const INTERVAL_MS = 60_000;
 
+/** Médias inline (`data:`) repérés dans un Markdown. */
+const DATA_URL = /data:([a-z0-9.+/-]+);base64,[A-Za-z0-9+/=]+/gi;
+/** Pièces jointes déjà hébergées sur le serveur. */
+const ATTACHMENT_PATH = /\/v1\/attachments\/[a-f0-9]{64}/g;
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * Moteur de synchronisation : file d'attente locale (IndexedDB) + curseur serveur.
  * - push : tout ce qui est en attente (PUT / DELETE)
@@ -182,7 +196,7 @@ class SyncStore {
 
       const body = {
         title: note.title,
-        md: note.md ?? '',
+        md: await this.externalizeMedia(config, note.md ?? ''),
         color: note.color,
         folderId: note.folderId,
         pinned: note.pinned,
@@ -231,8 +245,14 @@ class SyncStore {
       };
 
       for (const remote of data.notes) {
-        if (remote.deleted) await notesStore.removeRemote(remote.id);
-        else await notesStore.applyRemoteNote(remote);
+        if (remote.deleted) {
+          await notesStore.removeRemote(remote.id);
+        } else {
+          await notesStore.applyRemoteNote({
+            ...remote,
+            md: await this.localizeMedia(config, remote.md ?? '')
+          });
+        }
       }
 
       since = data.nextSince;
@@ -241,13 +261,65 @@ class SyncStore {
     }
   }
 
+  /**
+   * Avant l'envoi : chaque média `data:` est téléversé et remplacé par
+   * `/v1/attachments/<hash>`. Le Markdown reste lisible et léger.
+   */
+  private async externalizeMedia(
+    config: NonNullable<ReturnType<typeof readConfig>>,
+    md: string
+  ): Promise<string> {
+    const found = Array.from(new Set(md.match(DATA_URL) ?? []));
+    if (found.length === 0) return md;
+
+    let out = md;
+    for (const dataUrl of found) {
+      try {
+        const blob = await (await fetch(dataUrl)).blob();
+        const res = await this.fetcher(config, '/v1/attachments', {
+          method: 'POST',
+          headers: { 'content-type': blob.type || 'application/octet-stream' },
+          body: blob
+        });
+        if (!res?.ok) continue; // en cas d'échec on garde le data: (rien n'est perdu)
+        const { url } = (await res.json()) as { url: string };
+        out = out.split(dataUrl).join(url);
+      } catch {
+        // média illisible : on l'envoie tel quel
+      }
+    }
+    return out;
+  }
+
+  /** Après réception : les pièces jointes du serveur redeviennent des `data:` locaux. */
+  private async localizeMedia(
+    config: NonNullable<ReturnType<typeof readConfig>>,
+    md: string
+  ): Promise<string> {
+    const paths = Array.from(new Set(md.match(ATTACHMENT_PATH) ?? []));
+    if (paths.length === 0) return md;
+
+    let out = md;
+    for (const path of paths) {
+      try {
+        const res = await this.fetcher(config, path);
+        if (!res?.ok) continue;
+        const dataUrl = await blobToDataUrl(await res.blob());
+        out = out.split(path).join(dataUrl);
+      } catch {
+        // on laisse l'URL serveur : l'image ne s'affichera pas hors ligne
+      }
+    }
+    return out;
+  }
+
   async signOut(): Promise<void> {
     signOut();
     this.status = 'idle';
     this.lastSyncAt = null;
   }
 
-  /** Oublie le curseur (utile après avoir vidé le serveur). */
+  /** Oublie le curseur (utile après avoir vidé le serveur à la main). */
   async resetCursor(): Promise<void> {
     await writeMeta(SINCES, 0);
   }
