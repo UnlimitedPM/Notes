@@ -100,6 +100,20 @@ une note épinglée, une masquée, une à la corbeille et une vide, plus 2 dossi
 Elle sert aux tests **et** au bouton « Charger la base de test » des Réglages (visible en
 développement uniquement).
 
+### Bout en bout (E2E)
+
+L'app complète (front compilé + API en un seul processus) est testée avec Playwright :
+ouverture, création de note, persistance, tâches, URL profonde, réglages.
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium
+npm test
+```
+
+Le serveur de test démarre tout seul sur `http://127.0.0.1:4317`.
+
 ## iPhone
 
 Safari → Partager → **Sur l'écran d'accueil**. Barre d'état noire, plein écran.

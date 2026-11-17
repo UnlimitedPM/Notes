@@ -77,14 +77,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
       root: options.staticDir,
       wildcard: false,
       setHeaders: (reply: FastifyReply, path: string) => {
-        if (path.includes('/assets/')) {
+        const normalized = path.replace(/\\/g, '/');
+        if (normalized.includes('/assets/')) {
           reply.header('cache-control', 'public, max-age=31536000, immutable');
-        } else if (
-          path.endsWith('index.html') ||
-          path.endsWith('sw.js') ||
-          path.endsWith('registerSW.js') ||
-          path.endsWith('manifest.webmanifest')
-        ) {
+        } else {
           reply.header('cache-control', 'no-cache');
         }
       }
