@@ -30,7 +30,7 @@ service tiers.
 - **Fiabilité** : écritures atomiques pour les pièces jointes (fichier temporaire + rename),
   arrêt propre sur SIGINT/SIGTERM, `busy_timeout` pour éviter les verrous bloquants.
 
-Tests : `cd server && npm test` (18 tests, faux jeton, aucune dépendance à Keycloak).
+Tests : `cd backend && npm test` (18 tests, faux jeton, aucune dépendance à Keycloak).
 
 ## Keycloak
 
@@ -50,7 +50,7 @@ mis en cache), puis `iss`, puis `aud` si `OIDC_AUDIENCE` est défini — sinon i
 ## Lancer
 
 ```bash
-cd server
+cd backend
 cp .env.example .env      # renseigne OIDC_ISSUER et OIDC_CLIENT_ID
 npm install
 npm run dev               # http://localhost:8080
@@ -74,7 +74,7 @@ Deux conteneurs :
 
 | Service | Rôle | Port |
 | --- | --- | --- |
-| `web` | PWA compilée, servie par Nginx (`nginx/default.conf`) | `${WEB_PORT:-8081}` |
+| `web` | PWA compilée, servie par Nginx (`frontend/nginx.conf`) | `${WEB_PORT:-8081}` |
 | `notes-server` | API Fastify + SQLite | `${NOTES_SERVER_PORT:-8080}` |
 
 Nginx sert aussi `/v1/` et `/health` en proxy vers `notes-server` : dans Réglages →

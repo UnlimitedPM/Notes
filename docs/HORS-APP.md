@@ -133,7 +133,7 @@ des sauvegardes du serveur.
 | `lighthouse-ci` | seuil PWA / performance à chaque PR |
 | `jspdf` *(optionnel)* | export PDF propre, si demandé |
 
-### 4.2 Serveur (nouveau dossier `server/`)
+### 4.2 Serveur (nouveau dossier `backend/`)
 | Outil | Rôle |
 | --- | --- |
 | `hono` (ou `fastify`) | API HTTP légère, TypeScript, déployable partout |

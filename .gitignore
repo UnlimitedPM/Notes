@@ -10,9 +10,9 @@ shots/
 
 captures/
 
-# serveur
-server/data
-server/.env
-server/dist
+# backend
+backend/data
+backend/.env
+backend/dist
 .env
 

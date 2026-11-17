@@ -51,6 +51,7 @@ Réglages mesurés directement sur l'écran du téléphone (Redmi Note 11S, 1080
 ## Démarrer
 
 ```bash
+cd frontend
 npm install
 npm run dev        # http://localhost:5173 (exposé sur le réseau local)
 npm run check      # types + lint Svelte
@@ -63,13 +64,14 @@ npm run preview
 
 ## Serveur de synchronisation (optionnel)
 
-`server/` contient l'API auto-hébergeable (Fastify + SQLite + OIDC Keycloak) qui
+`frontend/` contient la PWA (Svelte + Vite + TypeScript). `backend/` contient l'API
+auto-hébergeable (Fastify + SQLite + OIDC Keycloak) qui
 permettra de retrouver les mêmes notes sur plusieurs appareils :
 notes en Markdown, pièces jointes en fichiers, pierres tombales pour les suppressions,
 détection de conflits par `updatedAt`.
 
 ```bash
-cd server
+cd backend
 cp .env.example .env      # OIDC_ISSUER + OIDC_CLIENT_ID
 npm install
 npm run dev               # http://localhost:8080
@@ -83,7 +85,7 @@ du stockage en Markdown restent à faire.
 ## Tests
 
 ```
-tests/
+frontend/tests/
   fixtures.ts            réexporte la base de test de src/lib/testFixtures.ts
   setup.ts               fake-indexeddb (IndexedDB en mémoire)
   markdown.test.ts       conversion HTML → Markdown
@@ -105,8 +107,9 @@ Safari → Partager → **Sur l'écran d'accueil**. Barre d'état noire, plein �
 ## Structure
 
 ```
-src/
-  App.svelte                   routes accueil / note / réglages / corbeille / dossiers
+frontend/
+  src/
+    App.svelte                 routes accueil / note / réglages / corbeille / dossiers
   app.css                      thèmes, couleurs, feuilles, toast
   lib/
     types.ts                   modèle (notes, dossiers, préférences, tâches)

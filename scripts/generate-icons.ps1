@@ -1,6 +1,6 @@
 Add-Type -AssemblyName System.Drawing
 
-$outDir = Join-Path $PSScriptRoot '..\public\icons'
+$outDir = Join-Path $PSScriptRoot '..\frontend\public\icons'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 function New-RoundedPath([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {

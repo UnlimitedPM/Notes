@@ -1,6 +1,6 @@
 services:
   web:
-    build: .
+    build: ./frontend
     container_name: notes-web
     restart: unless-stopped
     depends_on:
@@ -15,7 +15,7 @@ services:
       retries: 3
 
   notes-server:
-    build: ./server
+    build: ./backend
     container_name: notes-server
     restart: unless-stopped
     environment:

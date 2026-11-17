@@ -16,33 +16,36 @@ permissions:
 
 jobs:
   web:
-    name: App web (types, tests, build)
+    name: Frontend (types, tests, build)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm test
       - run: npm run build
 
   server:
-    name: Serveur (types, tests, build)
+    name: Backend (types, tests, build)
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: server
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run check
       - run: npm test
