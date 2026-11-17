@@ -27,13 +27,18 @@ const DATA_URL = /data:([a-z0-9.+/-]+);base64,[A-Za-z0-9+/=]+/gi;
 /** Pièces jointes déjà hébergées sur le serveur. */
 const ATTACHMENT_PATH = /\/v1\/attachments\/[a-f0-9]{64}/g;
 
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
+/**
+ * Encode un Blob en `data:`. Pas de `FileReader` : son implémentation jsdom refuse
+ * les Blob de `fetch` (undici) sur Node 22, ce qui casse la synchro des images.
+ */
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
 }
 
 /**
