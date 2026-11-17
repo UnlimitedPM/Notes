@@ -1,7 +1,7 @@
 {
   "name": "notes-server",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Serveur de synchronisation auto-hébergeable pour l'app Notes (Fastify + SQLite + OIDC).",
   "scripts": {
