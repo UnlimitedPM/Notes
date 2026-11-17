@@ -1,13 +1,17 @@
 import { z } from 'zod';
 
+/** Docker Compose transmet `""` quand une variable optionnelle n'est pas définie. */
+const blankAsUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
 const Schema = z.object({
   PORT: z.coerce.number().int().positive().default(8080),
   HOST: z.string().default('0.0.0.0'),
   DATA_DIR: z.string().default('./data'),
   OIDC_ISSUER: z.string().url(),
   OIDC_CLIENT_ID: z.string().min(1),
-  OIDC_AUDIENCE: z.string().min(1).optional(),
-  CORS_ORIGIN: z.string().optional(),
+  OIDC_AUDIENCE: z.preprocess(blankAsUndefined, z.string().min(1).optional()),
+  CORS_ORIGIN: z.preprocess(blankAsUndefined, z.string().optional()),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(25 * 1024 * 1024)
 });
 

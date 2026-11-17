@@ -8,6 +8,7 @@ services:
       DATA_DIR: /data
       OIDC_ISSUER: ${OIDC_ISSUER:?renseigne OIDC_ISSUER dans .env}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?renseigne OIDC_CLIENT_ID dans .env}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
     volumes:
       - notes-data:/data
