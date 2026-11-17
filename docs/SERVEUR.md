@@ -83,6 +83,20 @@ Les données vivent dans le volume `notes-data` (`notes.db` + `attachments/`).
 Image publiée : `ghcr.io/unlimitedpm/notes` (workflow `Release`, poussé sur un tag `v*`).
 Avec Compose : `IMAGE_TAG=v0.8.0 docker compose pull && IMAGE_TAG=v0.8.0 docker compose up -d`.
 
+### Avec l'image publiée, sans build
+
+`docker/docker-compose.yml` sert uniquement à exécuter l'image publiée :
+
+```bash
+cd docker
+cp .env.example .env      # IMAGE_TAG, APP_PORT, OIDC facultatif
+docker compose pull
+docker compose up -d
+```
+
+`IMAGE_TAG` choisit la version (par défaut `0.1.0`, voir les releases GitHub) et le
+volume `notes-data` est partagé avec le compose de la racine.
+
 ## Sauvegarde
 
 SQLite en mode WAL : **copier `notes.db` ne suffit pas**. Utilise :
