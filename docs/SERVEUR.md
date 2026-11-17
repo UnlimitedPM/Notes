@@ -66,9 +66,20 @@ curl -H "Authorization: Bearer <jeton>" localhost:8080/v1/notes
 Avec Docker (depuis la racine du dépôt) :
 
 ```bash
-# .env à la racine avec OIDC_ISSUER / OIDC_CLIENT_ID / CORS_ORIGIN
+# .env à la racine avec OIDC_ISSUER / OIDC_CLIENT_ID
 docker compose up -d --build
 ```
+
+Deux conteneurs :
+
+| Service | Rôle | Port |
+| --- | --- | --- |
+| `web` | PWA compilée, servie par Nginx (`nginx/default.conf`) | `${WEB_PORT:-8081}` |
+| `notes-server` | API Fastify + SQLite | `${NOTES_SERVER_PORT:-8080}` |
+
+Nginx sert aussi `/v1/` et `/health` en proxy vers `notes-server` : dans Réglages →
+Synchronisation, mets l'URL du **front** (ex. `http://localhost:8081`) et la synchro passe
+en même origine, sans CORS. `WEB_PORT` et `NOTES_SERVER_PORT` se règlent dans `.env`.
 
 Les données vivent dans le volume `notes-data` (`notes.db` + `attachments/`).
 
