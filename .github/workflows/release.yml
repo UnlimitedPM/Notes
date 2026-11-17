@@ -91,31 +91,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Référence de l'image
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Notes de version
+        run: |
+          NOTES=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTES" ]; then
+            echo "NOTES_FILE=$NOTES" >> "$GITHUB_ENV"
+            echo "HAS_NOTES=true" >> "$GITHUB_ENV"
+          else
+            echo "HAS_NOTES=false" >> "$GITHUB_ENV"
+          fi
 
       - uses: softprops/action-gh-release@v2
+        if: env.HAS_NOTES == 'true'
+        with:
+          body_path: ${{ env.NOTES_FILE }}
+
+      - uses: softprops/action-gh-release@v2
+        if: env.HAS_NOTES != 'true'
         with:
           generate_release_notes: true
-          body: |
-            ## Déploiement
-
-            Image unique (PWA et API dans le même conteneur) :
-
-            ```bash
-            docker pull ${{ env.IMAGE }}:${{ github.ref_name }}
-            docker run -d -p 8080:8080 -v notes-data:/data \
-              -e OIDC_ISSUER=https://sso.example.com/realms/mon-realm \
-              -e OIDC_CLIENT_ID=notes-pwa \
-              ${{ env.IMAGE }}:${{ github.ref_name }}
-            ```
-
-            Avec Compose (le service `app` pointe sur cette image) :
-
-            ```bash
-            IMAGE_TAG=${{ github.ref_name }} docker compose pull
-            IMAGE_TAG=${{ github.ref_name }} docker compose up -d
-            ```
-
-            Le conteneur sert la PWA et l'API sur le même port (`8080`), les données
-            vivent dans le volume `/data`.
