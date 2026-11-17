@@ -72,7 +72,7 @@ détection de conflits par `updatedAt`.
 
 ```bash
 cd backend
-cp .env.example .env      # OIDC_ISSUER + OIDC_CLIENT_ID
+cp .env.example .env      # OIDC facultatif (sans lui, l'API répond 503)
 npm install
 npm run dev               # http://localhost:8080
 npm test                  # 18 tests

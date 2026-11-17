@@ -51,10 +51,13 @@ mis en cache), puis `iss`, puis `aud` si `OIDC_AUDIENCE` est défini — sinon i
 
 ```bash
 cd backend
-cp .env.example .env      # renseigne OIDC_ISSUER et OIDC_CLIENT_ID
+cp .env.example .env      # OIDC_ISSUER et OIDC_CLIENT_ID facultatifs
 npm install
 npm run dev               # http://localhost:8080
 ```
+
+Sans OIDC (les deux variables absentes), le serveur démarre quand même : la PWA est
+servie, `/health` répond, et les routes `/v1` renvoient `503 sync_disabled`.
 
 Vérification rapide :
 
@@ -66,22 +69,19 @@ curl -H "Authorization: Bearer <jeton>" localhost:8080/v1/notes
 Avec Docker (depuis la racine du dépôt) :
 
 ```bash
-# .env à la racine avec OIDC_ISSUER / OIDC_CLIENT_ID
+# .env à la racine : OIDC_ISSUER / OIDC_CLIENT_ID facultatifs
 docker compose up -d --build
 ```
 
-Deux conteneurs :
-
-| Service | Rôle | Port |
-| --- | --- | --- |
-| `web` | PWA compilée, servie par Nginx (`frontend/nginx.conf`) | `${WEB_PORT:-8081}` |
-| `notes-server` | API Fastify + SQLite | `${NOTES_SERVER_PORT:-8080}` |
-
-Nginx sert aussi `/v1/` et `/health` en proxy vers `notes-server` : dans Réglages →
-Synchronisation, mets l'URL du **front** (ex. `http://localhost:8081`) et la synchro passe
-en même origine, sans CORS. `WEB_PORT` et `NOTES_SERVER_PORT` se règlent dans `.env`.
+Un seul conteneur (`notes-app`) : l'image compile la PWA, puis Fastify sert le front
+statique **et** l'API sur le même port (`${APP_PORT:-8080}`). Aucune config CORS n'est
+nécessaire : dans Réglages → Synchronisation, mets l'URL de l'app (ex.
+`http://localhost:8080`).
 
 Les données vivent dans le volume `notes-data` (`notes.db` + `attachments/`).
+
+Image publiée : `ghcr.io/unlimitedpm/notes` (workflow `Release`, poussé sur un tag `v*`).
+Avec Compose : `IMAGE_TAG=v0.8.0 docker compose pull && IMAGE_TAG=v0.8.0 docker compose up -d`.
 
 ## Sauvegarde
 

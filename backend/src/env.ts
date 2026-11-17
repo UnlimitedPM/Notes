@@ -4,16 +4,24 @@ import { z } from 'zod';
 const blankAsUndefined = (value: unknown) =>
   typeof value === 'string' && value.trim() === '' ? undefined : value;
 
-const Schema = z.object({
-  PORT: z.coerce.number().int().positive().default(8080),
-  HOST: z.string().default('0.0.0.0'),
-  DATA_DIR: z.string().default('./data'),
-  OIDC_ISSUER: z.string().url(),
-  OIDC_CLIENT_ID: z.string().min(1),
-  OIDC_AUDIENCE: z.preprocess(blankAsUndefined, z.string().min(1).optional()),
-  CORS_ORIGIN: z.preprocess(blankAsUndefined, z.string().optional()),
-  MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(25 * 1024 * 1024)
-});
+const Schema = z
+  .object({
+    PORT: z.coerce.number().int().positive().default(8080),
+    HOST: z.string().default('0.0.0.0'),
+    DATA_DIR: z.string().default('./data'),
+    // OIDC facultatif : sans issuer/client, l'API de synchro reste fermée.
+    OIDC_ISSUER: z.preprocess(blankAsUndefined, z.string().url().optional()),
+    OIDC_CLIENT_ID: z.preprocess(blankAsUndefined, z.string().min(1).optional()),
+    OIDC_AUDIENCE: z.preprocess(blankAsUndefined, z.string().min(1).optional()),
+    CORS_ORIGIN: z.preprocess(blankAsUndefined, z.string().optional()),
+    /** Dossier de la PWA compilée (vide = API seule). */
+    STATIC_DIR: z.preprocess(blankAsUndefined, z.string().optional()),
+    MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(25 * 1024 * 1024)
+  })
+  .refine((config) => (config.OIDC_ISSUER === undefined) === (config.OIDC_CLIENT_ID === undefined), {
+    message: 'OIDC_ISSUER et OIDC_CLIENT_ID se définissent ensemble',
+    path: ['OIDC_ISSUER']
+  });
 
 export type Config = z.infer<typeof Schema>;
 

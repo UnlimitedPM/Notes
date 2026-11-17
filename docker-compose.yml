@@ -1,34 +1,20 @@
 services:
-  web:
-    build: ./frontend
-    container_name: notes-web
-    restart: unless-stopped
-    depends_on:
-      notes-server:
-        condition: service_healthy
-    ports:
-      - '${WEB_PORT:-8081}:80'
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/']
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  notes-server:
-    build: ./backend
-    container_name: notes-server
+  app:
+    build: .
+    image: ghcr.io/unlimitedpm/notes:${IMAGE_TAG:-latest}
+    container_name: notes-app
     restart: unless-stopped
     environment:
       PORT: 8080
       DATA_DIR: /data
-      OIDC_ISSUER: ${OIDC_ISSUER:?renseigne OIDC_ISSUER dans .env}
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?renseigne OIDC_CLIENT_ID dans .env}
+      STATIC_DIR: /app/public
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-}
     volumes:
       - notes-data:/data
     ports:
-      - '${NOTES_SERVER_PORT:-8080}:8080'
+      - '${APP_PORT:-8080}:8080'
     healthcheck:
       test:
         [
